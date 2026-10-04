@@ -41,3 +41,5 @@ if(latestUpdaterCommit ~= updaterVersion) then
 else
     print("updater.lua is up to date.")
 end
+
+shell.run(updaterPath)
