@@ -1,4 +1,4 @@
 {
-  updaterVersion = "e145d406317611f50109f9adea75288cb01431b6",
   [ "shell.allow_startup" ] = false,
+  updaterVersion = "9c71832827610c8fd0e9bb893cf777b22f96b9fd",
 }

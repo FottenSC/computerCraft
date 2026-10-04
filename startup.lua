@@ -21,8 +21,9 @@ response.close()
 local json = assert(textutils.unserializeJSON(body))
 local ghUpdaterCommit = assert(json[1].sha)
 local updaterVersion = settings.get("updaterVersion", "EMPTY")
+local programExists = fs.exists(updaterPath)
 
-if(ghUpdaterCommit ~= updaterVersion) then
+if(ghUpdaterCommit ~= updaterVersion or programExists) then
     print("Updating updater.lua to commit: " .. ghUpdaterCommit:sub(1, 7))
     local url = "https://raw.githubusercontent.com/" .. repo .. "/" .. ghUpdaterCommit .. "/" .. updaterPath
 

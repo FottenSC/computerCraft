@@ -1,6 +1,9 @@
 # Compiled Lua sources
 luac.out
 
+# ComputerCraft settings
+.settings
+
 # luarocks build files
 *.src.rock
 *.zip
