@@ -1,13 +1,22 @@
 
-
+local currentCount = settings.get("totalBlocksBroken", 0)
 local whiteListBlock = "minecraft:netherrack"
+print("Starting block digger...")
+print("Total blocks broken: " .. currentCount)
+
+settings.set("updaterVersion", latestUpdaterCommit)
+settings.save()
 
 while true do
     local success, data = turtle.inspectDown()
     if success then
         if data.name ~= whiteListBlock then
-            print("Detected block below: " .. data.name .. ". Digging...")
             turtle.digDown()
+            currentCount = currentCount + 1
+            settings.set("totalBlocksBroken", currentCount)
+            settings.save()
+            
+            print("Detected block below: " .. data.name .. ". Current total: " .. currentCount)
         end
     end
     sleep(0.5)
