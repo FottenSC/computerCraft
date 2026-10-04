@@ -19,12 +19,12 @@ body = assert(response.readAll())
 response.close()
 
 local json = assert(textutils.unserializeJSON(body))
-local latestUpdaterCommit = json[1].sha
+local ghUpdaterCommit = assert(json[1].sha)
 local updaterVersion = settings.get("updaterVersion", "EMPTY")
 
-if(latestUpdaterCommit ~= updaterVersion) then
-    print("Updating updater.lua to commit: " .. latestUpdaterCommit:sub(1, 7))
-    local url = "https://raw.githubusercontent.com/" .. repo .. "/" .. latestUpdaterCommit .. "/" .. updaterPath
+if(ghUpdaterCommit ~= updaterVersion) then
+    print("Updating updater.lua to commit: " .. ghUpdaterCommit:sub(1, 7))
+    local url = "https://raw.githubusercontent.com/" .. repo .. "/" .. ghUpdaterCommit .. "/" .. updaterPath
 
     local download = assert(http.get(url))
     local source = assert(download.readAll())
@@ -34,7 +34,7 @@ if(latestUpdaterCommit ~= updaterVersion) then
     file.write(source)
     file.close()
 
-    settings.set("updaterVersion", latestUpdaterCommit)
+    settings.set("updaterVersion", ghUpdaterCommit)
     settings.save()
 
     print("Update successful :)")
