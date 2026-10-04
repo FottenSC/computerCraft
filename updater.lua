@@ -13,7 +13,7 @@ while true do
             settings.set("totalBlocksBroken", currentCount)
             settings.save()
 
-            print("Detected block below: " .. data.name .. ". Current total: " .. currentCount)
+            print("Current total: " .. currentCount)
         end
     end
     sleep(0.5)
