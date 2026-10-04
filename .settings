@@ -1,0 +1,4 @@
+{
+  updaterVersion = "e145d406317611f50109f9adea75288cb01431b6",
+  [ "shell.allow_startup" ] = false,
+}

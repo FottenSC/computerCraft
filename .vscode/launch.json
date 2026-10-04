@@ -1,0 +1,11 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "request": "launch",
+            "name": "ComputerCraft: startup.lua",
+            "type": "craftos-pc",
+            "program": "/startup.lua"
+        }
+    ]
+}
