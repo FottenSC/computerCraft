@@ -13,8 +13,7 @@ while true do
     local success, data = turtle.inspectDown()
     local doDig = true
     if success then
-        for imdex, block in ipairs(whiteListBlockList) do
-            print("Checking block: " .. data.name .. " against whitelist block: " .. block)
+        for index, block in ipairs(whiteListBlockList) do
             if data.name == block then
                 doDig = false
                 break
