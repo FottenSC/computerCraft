@@ -1,7 +1,8 @@
 
 local currentCount = settings.get("totalBlocksBroken", 0)
 -- local whiteListBlock = "minecraft:sand"
-local whiteListBlock = "minecraft:netherrack"
+-- local whiteListBlock = "minecraft:netherrack"
+local whiteListBlock = "minecraft:stone"
 print("Starting block digger...")
 print("Total blocks broken: " .. currentCount)
 
