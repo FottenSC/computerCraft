@@ -4,7 +4,7 @@ local currentCount = settings.get("totalBlocksBroken", 0)
 -- local whiteListBlock = "minecraft:netherrack"
 local whiteListBlockList = {
     "minecraft:stone",
-    -- "ftbmaterials:platinum_stone_ore"
+    "ftbmaterials:platinum_stone_ore"
 }
 print("Starting block digger...")
 print("Total blocks broken: " .. currentCount)
