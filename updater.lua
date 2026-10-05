@@ -29,7 +29,6 @@ while true do
         settings.save()
 
         print("Current total: " .. currentCount)
-        break
     end
 
     sleep(0.5)
