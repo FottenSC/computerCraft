@@ -11,19 +11,26 @@ print("Total blocks broken: " .. currentCount)
 
 while true do
     local success, data = turtle.inspectDown()
+    local doDig = true
     if success then
         for imdex, block in ipairs(whiteListBlockList) do
             if data.name == block then
-                turtle.digDown()
-                currentCount = currentCount + 1
-                settings.set("totalBlocksBroken", currentCount)
-                settings.save()
-
-                print("Current total: " .. currentCount)
+                doDig = false
                 break
             end
         end
     end
+
+    if(doDig) then
+        turtle.digDown()
+        currentCount = currentCount + 1
+        settings.set("totalBlocksBroken", currentCount)
+        settings.save()
+
+        print("Current total: " .. currentCount)
+        break
+    end
+
     sleep(0.5)
 end
 
