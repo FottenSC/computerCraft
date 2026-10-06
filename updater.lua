@@ -7,7 +7,7 @@ local whiteListBlockList = {
     -- "ftbmaterials:platinum_stone_ore",
     -- "ftbmaterials:uranium_stone_ore",
     "ftbmaterials:monazite_stone_ore",
-    "ftbmaterials:antimony_stone_ore",
+    -- "ftbmaterials:antimony_stone_ore",
 }
 print("Starting block digger...")
 print("Total blocks broken: " .. currentCount)
