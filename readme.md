@@ -1,229 +1,105 @@
 # ccpm for CC:Tweaked
 
-`ccpm` deploys programs and libraries from GitHub to CC:Tweaked computers. A package may follow a branch and update whenever the computer starts, or be pinned to an immutable Git commit or a version tag. Every resolved dependency is recorded at an exact commit, and an update only becomes active after every file has downloaded successfully.
+This is a personal project.
 
-## Install on a computer
+Install programs and libraries from GitHub, keep their dependencies at exact commits, and choose what runs at boot. Updates activate only after all package files download and pass validation.
 
-Requires CC:Tweaked 1.88 or newer. The default `block-checker` program requires a turtle; run the default bootstrap there. Other programs can be installed on regular computers.
+## Try the launch candidate
 
-Enable the CC:Tweaked HTTP API and allow these hosts if your server uses an HTTP allow-list:
-
-- `api.github.com`
-- `raw.githubusercontent.com`
-
-Then run:
+The first stable release is pending in-game acceptance testing. Use the development source to test this candidate on a computer or turtle:
 
 ```text
-wget run https://raw.githubusercontent.com/FottenSC/computerCraft/main/bootstrap.lua
+wget run https://raw.githubusercontent.com/FottenSC/computerCraft/v1.0.0-rc.1/bootstrap.lua --version 1.0.0-rc.1
 ```
 
-The bootstrap installs `block-checker`, tracks `main`, enables CraftOS startup and the package at startup, and reboots. To select another package or branch:
+Boot settings captured from the CraftOS-PC smoke test:
+
+![Fresh manager boot settings](docs/images/fresh-manager.svg)
+
+This installs **the manager only**. It does not install a program, change your CraftOS startup setting, or reboot. Existing `/startup.lua` and unrelated startup scripts are preserved.
+
+Enable the HTTP API on your server and allow `api.github.com` and `raw.githubusercontent.com`. Release-asset installation also needs `github.com` and `release-assets.githubusercontent.com`. The tested emulator baseline is CraftOS-PC 2.8.3; the Minecraft target is CC:Tweaked 1.119.0 in FTB Skies 2: Aero 1.13.0. Older CC:Tweaked versions are currently unverified; the old 1.88 minimum is no longer a tested support claim.
+
+After a stable release is published, the public installation command will be:
 
 ```text
-wget run https://raw.githubusercontent.com/FottenSC/computerCraft/main/bootstrap.lua my-program stable
+wget run https://github.com/FottenSC/computerCraft/releases/latest/download/bootstrap.lua
 ```
 
-The computer retains its last working install if GitHub is unavailable or a new deployment cannot be downloaded.
+Without source options, bootstrap and `ccpm self-update` select the latest published stable release. They never silently fall back to `main`. You can select `--version 1.0.0` once that tag exists, or `--commit` followed by a full 40-character SHA. Package installs default to the manager's recorded source; other repositories default to their latest stable release. Use `--branch main` explicitly for development.
 
-To stop a running program and return to the shell, hold **Ctrl+T**. To prevent it launching again at the next boot, run `ccpm set startup off`.
-
-## Day-to-day commands
+## Choose a package
 
 ```text
-# Get help, including all options for a command.
-ccpm help
-ccpm help install
-ccpm available --help
-
-# Follow main. This package is checked at each reboot.
-ccpm install block-checker --repo FottenSC/computerCraft --branch main --startup
-
-# Pin to the repository-wide v1.0.0 release tag.
-ccpm pin block-checker --version 1.0.0
-
-# Pin to one exact 40-character commit.
-ccpm pin block-checker --commit 0123456789abcdef0123456789abcdef01234567
-
-# Resume following a branch.
-ccpm track block-checker main
-
-# Update now, inspect installs, or run a package manually.
-ccpm update
-ccpm list
-ccpm run block-checker
-
-# Control boot behavior. These persist in /.settings.
-ccpm set
-ccpm set auto-update on
-ccpm set startup block-checker
-ccpm set startup off
-
-# Discover packages in a repository.
-ccpm available --repo FottenSC/computerCraft --branch main
-
-# Update the manager itself, or remove an installed package.
-ccpm self-update
-ccpm remove block-checker
+ccpm available
+ccpm install block-checker
+ccpm info block-checker
 ```
 
-Help and package lists pause when they fill the screen; press a key to continue. `ccpm list` shows each explicitly installed package, its repository, tracking or pinned source, and startup selection. Commit IDs are abbreviated for display. Its dependencies are managed automatically and are not listed separately.
-
-`ccpm set` displays the startup program, automatic update setting, CraftOS startup setting, and default repository. If CraftOS startup is disabled, enable it with `set shell.allow_startup true`. Removing the startup package also disables its launch; cached files remain on disk.
-
-The same boot settings can be managed with CraftOS's built-in `set` program:
-
-```text
-set ccpm.auto_update false
-set ccpm.startup_package block-checker
-```
-
-`ccpm.auto_update` only moves branch-tracked packages. Version- and commit-pinned packages remain fixed until explicitly pinned, tracked, or reinstalled.
-
-## Local API references
-
-Requires Python 3.11 or newer. To collect documentation for an installed modpack,
-run this from the repository folder on your development computer:
-
-```powershell
-python tools/fetch_docs.py --instance "C:\path\to\your\minecraft-instance"
-```
-
-The fetcher reads the instance's mod metadata, extracts bundled Lua APIs, help,
-and English Patchouli pages about computer integration, and downloads selected
-official documentation and API source from GitHub or GitLab at the commits
-in `docs/sources.json`. It never modifies the instance. The initial source list
-targets FTB Skies 2: Aero 1.13.0, Minecraft 1.21.1, and NeoForge 21.1.250.
-
-Open `.reference/index.md` for installed versions, reference paths, and coverage.
-Bundled files match the installed JAR; upstream snapshots are labelled **exact
-release**, **series reference**, or **unverified reference**. Detected integrations
-without a curated source are listed as gaps. Original license notices are retained.
-
-The instance path is remembered in the ignored `.reference/local.json`. After a
-modpack update, refresh with:
-
-```text
-python tools/fetch_docs.py
-```
-
-Completed snapshots are checked and reused. Changed mod versions are flagged and
-their old upstream pins are skipped; update `docs/sources.json` with matching
-release commits before relying on those references. Failed downloads are reported
-and return a nonzero exit status without replacing completed snapshots. To extract
-only installed references without downloading anything:
-
-```text
-python tools/fetch_docs.py --bundled-only
-```
-
-The source list and fetcher are tracked in Git. Downloaded references, per-file
-checksums, the installed-mod report, and the instance path stay in `.reference/`,
-which is ignored. `AGENTS.md` points coding work to this cache.
-
-Search the cache explicitly, including ignored files:
-
-```text
-rg --no-ignore "getEnergy" .reference/snapshots
-```
-
-## Package manifest
-
-Packages live in `ccpm-package.json` at the repository root. A program declares an entrypoint and may depend on libraries:
-
-```json
-{
-  "schema": 1,
-  "packages": {
-    "my-program": {
-      "version": "1.0.0",
-      "kind": "program",
-      "entrypoint": "main.lua",
-      "files": [
-        { "source": "projects/my-program/main.lua", "target": "main.lua" }
-      ],
-      "dependencies": {
-        "my-library": "*"
-      }
-    },
-    "my-library": {
-      "version": "1.0.0",
-      "kind": "library",
-      "files": [
-        { "source": "libs/my-library/init.lua", "target": "my_library/init.lua" }
-      ],
-      "dependencies": {}
-    }
-  }
-}
-```
-
-The program can then use normal CC:Tweaked module loading:
+`block-checker` requires a turtle and **digs the block below it unless that block is on its allow-list**. Inspect its configuration before running it. The defaults protect stone and monazite stone ore. Install it in a safe test area first. For example, configure blocks it must preserve from the CraftOS Lua prompt:
 
 ```lua
-local library = require("my_library")
+settings.set("blockChecker.allowed_blocks", {"minecraft:stone", "minecraft:chest"})
+settings.set("blockChecker.delay", 0.5)
+settings.save()
 ```
 
-Dependency selectors support:
-
-- `"*"`: the named package from the same repository and commit.
-- `"1.2.3"`: the named package from the same repository's `v1.2.3` tag.
-- `{ "repo": "owner/repo", "version": "1.2.3" }`: a version in another repository.
-- `{ "repo": "owner/repo", "commit": "..." }`: an exact external commit.
-- `{ "repo": "owner/repo", "branch": "main" }`: a branch resolved and locked during installation.
-
-Package files are isolated under `/.ccpm/store`. `ccpm run` creates a dedicated CC:Tweaked `require` environment containing the root program and all of its resolved libraries, so library files do not need to be copied into global paths.
-
-A dependency graph must have unique module providers. Installing two commits of the same package, or packages with overlapping module paths (including `helper.lua` versus `helper/init.lua`), is rejected before activation. Give shared modules distinct names or use the same locked dependency throughout the graph. Programs retain access to CraftOS's `shell` and `multishell` APIs. `shell.getRunningProgram()` identifies the installed entrypoint, and `arg` and varargs preserve the arguments passed to `ccpm run`.
-
-Manifest sources must be regular files inside the repository; symbolic links and directory junctions are rejected because GitHub's raw endpoint serves link contents rather than the linked file. Version selectors must match the package's declared version. Unknown, duplicate, and incomplete command options fail before installation.
-
-## Deploying commits and releases
-
-A push to `main` is a deployment for computers tracking `main`: at their next restart they resolve the branch, download the manifest and files by the resulting immutable SHA, and atomically switch the lockfile. No server or generated registry must be hosted.
-
-Before pushing, run the same checks as CI:
+Exit the Lua prompt, then run it deliberately:
 
 ```text
-python tools/ccpm_ci.py validate
-python -m unittest discover -s tests -v
-python tools/ccpm_ci.py build dist
+ccpm run block-checker
 ```
 
-The CI workflow validates the manifest, checks all package files, rejects dependency cycles and unsafe paths, parses every Lua file with Lua 5.2, runs repository-tool and runtime regression tests, builds checksums, and uploads an artifact including declared hidden source files. Runtime tests cover failed downloads, persistence failures, interrupted activations, dependency resolution, and program launch behavior. They run with mocks and again with pinned upstream CraftOS `cc.require`, `os.run`, rendering, and paging implementations. Terminal tests exercise 39x13 and 51x19 displays, paging cancellation, and command error reporting; platform I/O remains simulated.
+Hold **Ctrl+T** to stop. Libraries such as `ccpm-log` install automatically as dependencies and cannot run on their own. Other repositories work with `ccpm available --repo owner/repo` and `ccpm install name --repo owner/repo`; add source options when needed.
 
-To run the runtime checks locally with Lua 5.2 and `lua-cjson` installed (POSIX shell):
-
-```sh
-lua5.2 tests/ccpm_runtime_test.lua
-api_dir="$(mktemp -d)"
-python tools/fetch_ccpm_test_apis.py "$api_dir"
-CCPM_UPSTREAM_DIR="$api_dir" lua5.2 tests/ccpm_runtime_test.lua
-```
-
-The artifact includes all manifest source files at their repository paths. Releases also include `ccpm.tar.gz`, containing the complete distribution; extract it before verifying `checksums.sha256`.
-
-For an immutable release, update every package version in `ccpm-package.json`, commit, and tag that commit. The release workflow requires every package version to match the tag and publishes the bootstrap, manager, startup file, manifest, index, and SHA-256 checksum list:
+## Choose boot behavior
 
 ```text
-git tag v1.1.0
-git push origin main v1.1.0
+ccpm set
+ccpm set startup block-checker
+ccpm set auto-update on
+ccpm set startup off
 ```
 
-Tags are repository-wide releases. This keeps dependency resolution deterministic: `--version 1.1.0` always means the exact `v1.1.0` commit for the repository.
+No program is selected by a fresh manager installation. Selecting a program saves that choice for the next boot; it does not launch it immediately. `ccpm install name --startup` combines installation and selection. Bootstrap also accepts an optional package plus `--startup` and `--reboot`, each explicitly requested.
 
-## Failure and rollback behavior
+Reinstalling preserves saved ccpm settings, including an existing startup selection. Inspect `ccpm set` before rebooting an upgraded computer.
 
-- Downloads go into a staging directory and receive a completion marker before activation.
-- Lua files and program entrypoints are checked for syntax errors before activation.
-- Repairs to an incomplete cache retain the previous directory and a recovery journal until the replacement is active. Interrupted repairs roll back when the next command loads state.
-- The state file is replaced only after the full dependency graph is installed.
-- Settings persistence failures are reported and restore the previous in-memory setting. A library cannot be selected as the startup program.
-- A startup update failure prints an error and runs the previous locked version.
-- Removing a root retains the content-addressed cache, making recovery possible without deleting unrelated packages.
-- The GitHub API is only needed to resolve moving branches and tags. Package contents are always fetched by exact SHA over HTTPS.
-- Named updates also preserve pinned packages. Commit selectors must be full 40-character hexadecimal SHAs.
-- Downloads and installed payloads use binary mode so arbitrary file bytes are preserved on older supported CC:Tweaked versions.
-- Overlapping state-changing commands are rejected with a retry message. The lock is released before running a package, on command errors, and on reboot.
-- Bootstrap and self-update stage both runtime files, keep backups, and use a temporary `/startup/00-ccpm-recovery.lua` hook to restore an interrupted activation at boot. An existing `/startup` file or an unrelated file at the recovery hook path prevents runtime installation without replacing it.
+ccpm installs `/startup/10-ccpm.lua`. CraftOS runs a user `/startup.lua` first, then startup directory scripts sequentially; a program that loops in your existing startup can prevent ccpm from running. Keep only one long-running boot program, or arrange your own startup orchestration. If CraftOS startup is disabled, enable it with `set shell.allow_startup true`. `ccpm doctor` reports both settings and startup conflicts.
 
-The implementation targets CC:Tweaked 1.88 or newer because isolated library environments use `cc.require`.
+Automatic updates apply to stable releases and explicitly tracked branches. Version and commit pins stay fixed. To follow development or pin a release:
+
+```text
+ccpm track block-checker main
+ccpm pin block-checker --version 1.0.0
+ccpm update
+```
+
+## Recover, diagnose, or remove
+
+```text
+ccpm version
+ccpm info block-checker
+ccpm doctor
+ccpm rollback block-checker
+ccpm prune --dry-run
+ccpm prune
+ccpm remove block-checker
+ccpm uninstall
+```
+
+`doctor` works offline and prints versions, source commits, boot settings, cache health, and the last recorded command failure. Copy its output into a [bug report](https://github.com/FottenSC/computerCraft/issues/new/choose).
+
+`rollback` activates the previous cached installation and its dependencies without downloading anything. It pins that commit so the next reboot cannot immediately undo the rollback. Use `track` to resume branch updates. A failed boot update runs the existing locked version. Failed state or runtime activation is recovered from a journal on the next command or boot.
+
+`prune` removes unused, recognized package cache directories and preserves every active and previous dependency graph. Preview with `--dry-run`. Removing a package disables its boot selection and keeps its cache until pruning. `uninstall` removes the manager and its owned boot hooks, preserving your startup files, settings unrelated to ccpm, and package cache. Reinstall bootstrap to reuse that cache.
+
+The previous manager and hook remain in `/.ccpm/previous-runtime/` after self-update. If the manager cannot run, back up `/ccpm.lua` and `/startup/10-ccpm.lua`, then copy the corresponding previous-runtime files back to those paths. This is separate from package rollback. An old ccpm-owned `/startup.lua` is migrated to `/.ccpm/legacy-startup.lua`; unrelated startup files are never replaced. Startup files overwritten by versions predating this change cannot be recovered without your own backup.
+
+For HTTP failures, check the server's HTTP setting and host allow-list. GitHub rate limits can temporarily prevent branch/tag resolution; cached programs and rollback continue to work offline. A regular file at `/startup` prevents hook installation: back it up, then move it to `/startup.lua` if that path is free. ccpm refuses conflicting manager or hook paths and leaves them intact.
+
+Run `ccpm help` or `ccpm help <command>` for command details. Help and package listings pause at the bottom of small computer and turtle screens.
+
+## Contribute
+
+See [development and package manifests](docs/development.md), [testing and releases](docs/testing.md), [contributing](CONTRIBUTING.md), and the [changelog](CHANGELOG.md). Downloaded third-party API references retain their upstream notices and are not included in the distribution.

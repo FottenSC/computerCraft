@@ -2,8 +2,9 @@
   "schema": 1,
   "packages": {
     "block-checker": {
-      "version": "1.0.0",
+      "version": "1.0.0-rc.1",
       "kind": "program",
+      "requires": { "turtle": true },
       "description": "A turtle program which digs blocks not present in a configurable allow-list.",
       "entrypoint": "main.lua",
       "files": [
@@ -17,7 +18,7 @@
       }
     },
     "ccpm-log": {
-      "version": "1.0.0",
+      "version": "1.0.0-rc.1",
       "kind": "library",
       "description": "Small timestamped logging helpers for CC:Tweaked programs.",
       "files": [

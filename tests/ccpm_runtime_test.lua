@@ -6,6 +6,7 @@ local hostRequire = require
 local root = os.getenv("CCPM_TEST_ROOT") or "."
 local commit = string.rep("a", 40)
 local remoteCommit = commit
+turtle = {}
 
 local files, directories = {}, { [""] = true, ["/"] = true }
 
@@ -111,7 +112,18 @@ function settings.save() return true end
 textutils = {
     unserializeJSON = function(value) return cjson.decode(value) end,
     json_null = cjson.null,
-    serializeJSON = cjson.encode,
+    serializeJSON = function(value)
+        -- CraftOS rejects repeated table identities, even without a cycle.
+        local seen = {}
+        local function visit(item)
+            if type(item) ~= "table" then return end
+            assert(not seen[item], "Cannot serialize table with repeated entries")
+            seen[item] = true
+            for _, child in pairs(item) do visit(child) end
+        end
+        visit(value)
+        return cjson.encode(value)
+    end,
     formatTime = function() return "12:00" end,
     pagedPrint = function(message)
         assert(not _G.__ccpm_write_lock, "paging must not hold the manager lock")
@@ -147,7 +159,9 @@ function http.get(url, _, binary)
     assert(binary == true, "downloads must preserve raw bytes")
     requestCount = requestCount + 1
     local body
-    if url:find("api.github.com", 1, true) then
+    if url:match("/releases/latest$") then
+        body = cjson.encode({tag_name="v1.0.0", draft=false, prerelease=false})
+    elseif url:find("api.github.com", 1, true) then
         body = githubCommitResponse(remoteCommit)
     else
         local requestedCommit, relative = url:match("/([0-9a-f]+)/(.+)$")
@@ -266,7 +280,7 @@ local beforeUpdate = requestCount
 ccpm("update", "block-checker")
 assert(requestCount == beforeUpdate + 1, "an unchanged update should only resolve the branch once")
 
-ccpm("pin", "block-checker", "--version", "1.0.0")
+ccpm("pin", "block-checker", "--version", cjson.decode(hostRead("ccpm-package.json")).packages["block-checker"].version)
 state = cjson.decode(files["/.ccpm/state.json"])
 assert(state.roots["block-checker"].selector.kind == "version")
 
@@ -318,7 +332,9 @@ end
 http.get = function(url, _, binary)
     assert(binary == true, "downloads must preserve raw bytes")
     local body
-    if url:find("api.github.com", 1, true) then
+    if url:match("/releases/latest$") then
+        body = cjson.encode({tag_name="v1.0.0", draft=false, prerelease=false})
+    elseif url:find("api.github.com", 1, true) then
         body = githubCommitResponse(remoteCommit)
     elseif url:match("ccpm%-package.json$") then
         body = cjson.encode(testManifest)
@@ -378,12 +394,12 @@ for _, legacy in ipairs({ false, true }) do
         local legacyPackages = {}
         for key, node in pairs(state.packages) do
             for index, dependency in ipairs(node.dependencies) do
-                node.dependencies[index] = dependency:gsub("^root1|", "")
+                node.dependencies[index] = dependency:gsub("^root1|%d+|", "")
             end
-            legacyPackages[(key:gsub("^root1|", ""))] = node
+            legacyPackages[(key:gsub("^root1|%d+|", ""))] = node
         end
         state.packages = legacyPackages
-        state.roots.root1.node = state.roots.root1.node:gsub("^root1|", "")
+        state.roots.root1.node = state.roots.root1.node:gsub("^root1|%d+|", "")
         files["/.ccpm/state.json"] = cjson.encode(state)
     end
     local originalRoot = state.roots.root1.node
@@ -547,10 +563,12 @@ http.get, fs.open = fixtureGet, originalOpen
 -- Installer tests exercise the same transaction used by bootstrap/self-update.
 local startupSource = hostRead("startup.lua")
 local managerSource = hostRead("ccpm.lua")
-local oldManager, oldStartup = "-- old manager\nreturn true", startupSource .. "\n-- old startup"
+local oldManager, oldStartup = "-- ccpm: old manager\nreturn true", startupSource .. "\n-- old startup"
 local function seedRuntime()
     resetFixture()
-    files["/ccpm.lua"], files["/startup.lua"] = oldManager, oldStartup
+    files["/ccpm.lua"], files["/startup/10-ccpm.lua"] = oldManager, oldStartup
+    makeDirectory("/startup")
+    files["/startup.lua"] = "-- user startup\nreturn true"
     http.get = function(url, headers, binary)
         assert(binary == true)
         local body
@@ -563,7 +581,8 @@ local function seedRuntime()
 end
 local function unchangedRuntime()
     assert(files["/ccpm.lua"] == oldManager)
-    assert(files["/startup.lua"] == oldStartup)
+    assert(files["/startup/10-ccpm.lua"] == oldStartup)
+    assert(files["/startup.lua"] == "-- user startup\nreturn true")
 end
 seedRuntime()
 local runtimeGet = http.get
@@ -575,7 +594,7 @@ assert(not pcall(ccpm, "self-update"))
 unchangedRuntime()
 
 local originalMove, originalCopy, originalDelete = fs.move, fs.copy, fs.delete
-for _, target in ipairs({ "/ccpm.lua", "/startup.lua" }) do
+for _, target in ipairs({ "/ccpm.lua", "/startup/10-ccpm.lua", "/.ccpm/runtime.json" }) do
     seedRuntime()
     fs.move = function(source, destination)
         if destination == target then error("activation failed") end
@@ -592,7 +611,7 @@ assert(not pcall(ccpm, "self-update"))
 unchangedRuntime()
 fs.copy = originalCopy
 ccpm("self-update")
-assert(files["/ccpm.lua"] == managerSource and files["/startup.lua"] == startupSource)
+assert(files["/ccpm.lua"] == managerSource and files["/startup/10-ccpm.lua"] == startupSource)
 assert(not fs.exists("/.ccpm/runtime-update"))
 
 -- If rollback fails too, keep the journal/backups and recover on the next boot.
@@ -615,16 +634,16 @@ local recoveryEnvironment = setmetatable({ shell = { run = function()
     recoveryLaunched = true
     return true
 end } }, { __index = _G })
-assert(load(files["/startup.lua"], "@startup", "t", recoveryEnvironment))()
+assert(load(files["/startup/00-ccpm-recovery.lua"], "@startup", "t", recoveryEnvironment))()
 assert(recoveryLaunched and not fs.exists("/.ccpm/runtime-update/pending.json"))
 
 -- Stop the coroutine after each active-file mutation to model power loss,
 -- bypassing pcall cleanup. Reboot invokes whichever startup entrypoint survives.
-for crashAt = 1, 5 do
+for crashAt = 1, 6 do
     seedRuntime()
     local mutations = 0
     local function checkpoint(path)
-        if path == "/ccpm.lua" or path == "/startup.lua" or path == "/.ccpm/runtime-update/pending.json" then
+        if path == "/ccpm.lua" or path == "/startup/10-ccpm.lua" or path == "/.ccpm/runtime.json" or path == "/.ccpm/runtime-update/pending.json" then
             mutations = mutations + 1
             if mutations == crashAt then coroutine.yield("power loss") end
         end
@@ -645,14 +664,14 @@ for crashAt = 1, 5 do
         launches = launches + 1
         return true
     end } }, { __index = _G })
-    local boot = files["/startup.lua"] or files["/startup/00-ccpm-recovery.lua"]
+    local boot = files["/startup/00-ccpm-recovery.lua"] or files["/startup/10-ccpm.lua"]
     assert(load(boot, "@boot", "t", bootEnv))()
     if files["/startup/00-ccpm-recovery.lua"] then
         assert(load(files["/startup/00-ccpm-recovery.lua"], "@hook", "t", bootEnv))()
     end
     assert(launches == 1)
-    if crashAt < 5 then unchangedRuntime()
-    else assert(files["/ccpm.lua"] == managerSource and files["/startup.lua"] == startupSource) end
+    if crashAt < 6 then unchangedRuntime()
+    else assert(files["/ccpm.lua"] == managerSource and files["/startup/10-ccpm.lua"] == startupSource) end
     assert(not fs.exists("/.ccpm/runtime-update/pending.json"))
 end
 
@@ -690,8 +709,10 @@ for _, failure in ipairs({ "download", "activation", "syntax" }) do
 end
 seedRuntime()
 assert(loadfile(root .. "/bootstrap.lua", "t", bootstrapEnvironment))()
+assert(installs == 0 and reboots == 0)
+assert(loadfile(root .. "/bootstrap.lua", "t", bootstrapEnvironment))("block-checker", "--branch", "main", "--startup", "--reboot")
 assert(installs == 1 and reboots == 1)
-assert(files["/ccpm.lua"] == managerSource and files["/startup.lua"] == startupSource)
+assert(files["/ccpm.lua"] == managerSource and files["/startup/10-ccpm.lua"] == startupSource)
 os.reboot, http.get = oldReboot, fixtureGet
 
 -- Preserve program identity and arguments without mutating the invoking shell.
@@ -734,7 +755,7 @@ seedRuntime()
 settings.save = function() return false end
 local previousReboots, previousInstalls = reboots, installs
 os.reboot = function() reboots = reboots + 1 end
-assert(not pcall(assert(loadfile(root .. "/bootstrap.lua", "t", bootstrapEnvironment))))
+assert(loadfile(root .. "/bootstrap.lua", "t", bootstrapEnvironment))()
 assert(reboots == previousReboots and installs == previousInstalls)
 settings.save, os.reboot, http.get = originalSave, oldReboot, fixtureGet
 
@@ -1029,11 +1050,111 @@ if upstreamDirectory then
 end
 print, textutils.pagedPrint = hostPrint, savedPagedPrint
 
--- Installer help and incompatible-device checks happen before downloads or writes.
+-- Bootstrap help needs no network. Hardware checks use package requirements.
 http.get = function() error("bootstrap must not request the network") end
 local bootstrapWithoutTurtle = setmetatable({turtle=false}, {__index=bootstrapEnvironment})
 assert(loadfile(root .. "/bootstrap.lua", "t", bootstrapWithoutTurtle))("--help")
-local deviceOk, deviceError = pcall(assert(loadfile(root .. "/bootstrap.lua", "t", bootstrapWithoutTurtle)))
-assert(not deviceOk and deviceError:find("requires a turtle", 1, true))
 http.get = fixtureGet
+
+-- A hardware failure does not activate a package, even when installed by SHA.
+resetFixture()
+testManifest = {schema=1, packages={foo=program()}}
+testManifest.packages.foo.requires = {turtle=true}
+turtle = nil
+local deviceOk, deviceError = pcall(ccpm, "install", "foo", "--commit", commit)
+assert(not deviceOk and deviceError:find("requires a turtle", 1, true))
+assert(not files["/.ccpm/state.json"])
+turtle = {}
+
+-- Stable defaults never fall back to an untested moving branch.
+resetFixture()
+testManifest = {schema=1, packages={foo=program()}}
+local requested = {}
+http.get = function(url, ...)
+    requested[#requested+1] = url
+    return fixtureGet(url, ...)
+end
+ccpm("install", "foo")
+state = cjson.decode(files["/.ccpm/state.json"])
+assert(state.roots.foo.selector.kind == "stable")
+assert(requested[1]:match("/releases/latest$") and requested[2]:find("refs%%2Ftags%%2Fv1.0.0"))
+local stableLock = files["/.ccpm/state.json"]
+http.get = function() return {getResponseCode=function() return 404 end, readAll=function() return '{}' end, close=function() end} end
+assert(not pcall(ccpm, "update", "foo"))
+assert(files["/.ccpm/state.json"] == stableLock)
+http.get = fixtureGet
+
+-- Rollback and pruning retain both dependency graphs, without network access.
+resetFixture()
+testManifest = {schema=1, packages={foo=program({helper="*"}), helper=library("helper")}}
+ccpm("install", "foo", "--branch", "main")
+local firstCommit = commit
+remoteCommit = string.rep("b", 40)
+ccpm("update", "foo")
+local secondCommit = remoteCommit
+remoteCommit = string.rep("c", 40)
+ccpm("update", "foo")
+state = cjson.decode(files["/.ccpm/state.json"])
+local activePath = state.packages[state.roots.foo.node].path
+local previousPath = state.packages[state.roots.foo.previous.node].path
+http.get = function() error("offline command requested network") end
+local beforePrune = files["/.ccpm/state.json"]
+ccpm("prune", "--dry-run")
+assert(files["/.ccpm/state.json"] == beforePrune)
+ccpm("prune")
+assert(fs.exists(activePath) and fs.exists(previousPath))
+assert(not fs.exists("/.ccpm/store/FottenSC_computerCraft/" .. firstCommit .. "/foo"))
+ccpm("rollback", "foo")
+state = cjson.decode(files["/.ccpm/state.json"])
+assert(state.roots.foo.resolved == secondCommit and state.roots.foo.selector.kind == "commit")
+executePrograms = true
+ccpm("run", "foo")
+ccpm("version")
+ccpm("info", "foo")
+ccpm("doctor")
+ccpm("prune")
+ccpm("rollback", "foo")
+assert(cjson.decode(files["/.ccpm/state.json"]).roots.foo.resolved == remoteCommit)
+http.get = fixtureGet
+
+-- An unrelated startup survives install, self-update and uninstall.
+seedRuntime()
+ccpm("self-update", "--commit", commit)
+assert(files["/.ccpm/previous-runtime/ccpm.lua"] == oldManager)
+ccpm("uninstall")
+assert(not fs.exists("/ccpm.lua") and not fs.exists("/startup/10-ccpm.lua"))
+assert(files["/startup.lua"] == "-- user startup\nreturn true")
+
+-- Migrating the old ccpm wrapper saves it permanently, without double launch.
+seedRuntime()
+files["/startup.lua"] = oldStartup
+ccpm("self-update", "--commit", commit)
+assert(not fs.exists("/startup.lua") and files["/.ccpm/legacy-startup.lua"] == oldStartup)
+
+-- Corrupt future-version journals must not touch unrelated startup files.
+seedRuntime()
+files["/.ccpm/runtime-update/pending.json"] = cjson.encode({schema=3, ["ccpm.lua"]=false, ["startup.lua"]=false})
+local installer = assert(load(startupSource, "@installer", "t", _ENV))("--installer")
+assert(not pcall(installer.recover))
+unchangedRuntime()
+
+-- Invalid block-checker settings fail before any physical action.
+for _, configuration in ipairs({
+    {allowed={}, delay=0.5}, {allowed={"stone"}, delay=0.5},
+    {allowed={"minecraft:stone"}, delay=-1}, {allowed={"minecraft:stone"}, delay=math.huge},
+    {allowed={"minecraft:stone"}, delay=0.5, count=math.huge},
+}) do
+    local physicalCalls = 0
+    local environment = setmetatable({
+        require=function() return {info=function() end} end,
+        settings={define=function() end, get=function(name, fallback)
+            if name == "blockChecker.allowed_blocks" then return configuration.allowed end
+            if name == "blockChecker.delay" then return configuration.delay end
+            return configuration.count or fallback
+        end},
+        turtle={inspectDown=function() physicalCalls=physicalCalls+1; error("physical action") end},
+    }, {__index=_G})
+    assert(not pcall(assert(load(hostRead("projects/blockChecker/main.lua"), "@block-checker", "t", environment))))
+    assert(physicalCalls == 0)
+end
 print("ccpm runtime tests: ok")

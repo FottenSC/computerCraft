@@ -2,6 +2,7 @@
 -- Packages are described by ccpm-package.json and installed from immutable commits.
 
 local args = { ... }
+local VERSION = "1.0.0-rc.1"
 local unpack = table.unpack or unpack
 
 local CCPM_ROOT = "/.ccpm"
@@ -11,10 +12,21 @@ local STATE_PATH = CCPM_ROOT .. "/state.json"
 local REPAIR_PATH = CCPM_ROOT .. "/cache-repair.json"
 local MANIFEST_NAME = "ccpm-package.json"
 local DEFAULT_REPOSITORY = "FottenSC/computerCraft"
+local runtimeRepository = DEFAULT_REPOSITORY
+-- A custom bootstrap source becomes the default without writing /.settings.
+pcall(function()
+    local handle = fs.open(CCPM_ROOT .. "/runtime.json", "rb")
+    if not handle then return end
+    local body = handle.readAll(); handle.close()
+    local metadata = textutils.unserializeJSON(body)
+    if type(metadata) == "table" and type(metadata.repo) == "string"
+        and metadata.repo:match("^[A-Za-z0-9][A-Za-z0-9%-]*/[A-Za-z0-9%._%-]+$")
+        and not metadata.repo:match("/%.%.?$") then runtimeRepository = metadata.repo end
+end)
 
 settings.define("ccpm.default_repo", {
     description = "Default GitHub owner/repository used by ccpm",
-    default = DEFAULT_REPOSITORY,
+    default = runtimeRepository,
     type = "string",
 })
 settings.define("ccpm.auto_update", {
@@ -213,6 +225,12 @@ end
 local commitCache = {}
 local function resolveCommit(repository, selector)
     validateRepository(repository)
+    if selector.kind == "stable" then
+        local release = decodeJson(request("https://api.github.com/repos/" .. repository .. "/releases/latest"), "GitHub release", true)
+        if type(release.tag_name) ~= "string" or not release.tag_name:match("^v%d+%.%d+%.%d+$")
+            or release.draft or release.prerelease then fail("No published stable release for " .. repository, 1) end
+        return resolveCommit(repository, {kind="version", value=release.tag_name:sub(2)})
+    end
     if type(selector.value) ~= "string" or selector.value == "" then
         fail("Selector must be a non-empty string", 1)
     end
@@ -293,6 +311,12 @@ local function validatePackage(name, packageDefinition)
     end
     if not validVersion(packageDefinition.version) then
         fail("Package " .. name .. " has an invalid version", 1)
+    end
+    if packageDefinition.requires ~= nil then
+        if type(packageDefinition.requires) ~= "table" then fail("Invalid requirements in " .. name, 1) end
+        for capability, value in pairs(packageDefinition.requires) do
+            if capability ~= "turtle" or type(value) ~= "boolean" then fail("Unsupported requirement in " .. name, 1) end
+        end
     end
     if not isArray(packageDefinition.files) or #packageDefinition.files == 0 then
         fail("Package " .. name .. " has no files", 1)
@@ -453,10 +477,13 @@ local function resolveGraph(repository, selector, packageName, graph, visiting)
         commit = commit,
         version = definition.version,
         kind = definition.kind,
+        requires = definition.requires,
+        description = definition.description,
         entrypoint = definition.entrypoint,
         path = packagePath(repository, commit, packageName),
         dependencies = dependencies,
         modules = moduleNames(targets),
+        files = targets,
         definition = definition,
     }
     visiting[key] = nil
@@ -537,13 +564,18 @@ local function installRoot(state, packageName, repository, selector, resolvedCom
         fail("Startup package must be a program: " .. packageName, 1)
     end
 
+    for _, node in pairs(graph) do
+        if node.requires and node.requires.turtle and not turtle then fail(node.name .. " requires a turtle", 1) end
+    end
     validateModuleProviders(graph)
     for _, key in ipairs(sortedKeys(graph)) do installNode(graph[key]) end
 
     -- File contents are shared, but each root owns its dependency resolutions.
     -- Legacy unscoped nodes remain readable and are never overwritten here.
-    local prefix = packageName .. "|"
-    local nextState = { schema = 1, roots = {}, packages = {} }
+    local generation = (state.generation or 0) + 1
+    local prefix = packageName .. "|" .. generation .. "|"
+    local graphSignature = table.concat(sortedKeys(graph), "\n")
+    local nextState = { schema = 1, roots = {}, packages = {}, generation=generation }
     for name, root in pairs(state.roots) do nextState.roots[name] = root end
     for key, node in pairs(state.packages) do nextState.packages[key] = node end
     for key, node in pairs(graph) do
@@ -554,15 +586,25 @@ local function installRoot(state, packageName, repository, selector, resolvedCom
         nextState.packages[prefix .. key] = node
     end
     rootKey = prefix .. rootKey
+    local oldRoot, previous = state.roots[packageName]
+    if oldRoot then
+        if oldRoot.signature == graphSignature then previous = oldRoot.previous
+        else
+            previous = {}
+            for key, value in pairs(oldRoot) do if key ~= "previous" then previous[key] = value end end
+        end
+    end
     nextState.roots[packageName] = {
         name = packageName,
         repo = repository,
-        selector = selector,
+        selector = {kind=selector.kind, value=selector.value},
         resolved = commit,
         node = rootKey,
+        previous = previous,
+        signature = graphSignature,
     }
     saveState(nextState)
-    state.roots, state.packages = nextState.roots, nextState.packages
+    state.roots, state.packages, state.generation = nextState.roots, nextState.packages, generation
     print(("Installed %s %s at %s"):format(
         packageName, state.packages[rootKey].version, commit:sub(1, 7)))
 end
@@ -570,7 +612,7 @@ end
 local function updateRoot(state, name, force)
     local root = state.roots[name]
     if not root then fail("Package is not installed: " .. name, 1) end
-    if root.selector.kind ~= "branch" then
+    if root.selector.kind ~= "branch" and root.selector.kind ~= "stable" then
         print(name .. " is pinned; skipping")
         return false
     end
@@ -593,8 +635,8 @@ local function parseOptions(values, startAt, allowed)
             if not allowed[key] then fail("Unknown option --" .. key, 1) end
             if options[key] ~= nil then fail("Duplicate option --" .. key, 1) end
         end
-        if value == "--startup" then
-            options.startup = true
+        if value == "--startup" or value == "--dry-run" then
+            options[value:sub(3)] = true
         elseif value:sub(1, 2) == "--" then
             local key = value:sub(3)
             index = index + 1
@@ -608,14 +650,20 @@ local function parseOptions(values, startAt, allowed)
     return positional, options
 end
 
-local function selectorFromOptions(options, defaultBranch)
+local function selectorFromOptions(options, repository)
     local found = {}
     for _, kind in ipairs({ "branch", "version", "commit" }) do
         if options[kind] then found[#found + 1] = kind end
     end
     if #found > 1 then fail("Choose only one of --branch, --version, or --commit", 1) end
-    local kind = found[1] or "branch"
-    return { kind = kind, value = options[kind] or defaultBranch or "main" }
+    local kind = found[1]
+    if kind then return {kind=kind, value=options[kind]} end
+    local raw = readFile(CCPM_ROOT .. "/runtime.json")
+    if raw then
+        local runtime = decodeJson(raw, "runtime metadata")
+        if runtime.repo == repository and type(runtime.selector) == "table" then return runtime.selector end
+    end
+    return {kind="stable", value="latest"}
 end
 
 local function collectLibraryPaths(state, nodeKeyValue, paths, visited)
@@ -637,6 +685,7 @@ local function runPackage(state, name, programArguments)
     local node = state.packages[root.node]
     if not node then fail("Installed package metadata is missing for " .. name, 1) end
     if node.kind ~= "program" then fail(name .. " is a library and cannot be run", 1) end
+    if node.requires and node.requires.turtle and not turtle then fail(name .. " requires a turtle", 1) end
 
     local entrypoint = node.path .. "/" .. node.entrypoint
     if not fs.exists(entrypoint) then fail("Entrypoint is missing: " .. entrypoint, 1) end
@@ -668,16 +717,23 @@ local function display(lines)
 end
 
 local helpTopics = {
+    version = {"ccpm version", "", "Show manager version and source commit."},
+    info = {"ccpm info <name>", "", "Show installed package, dependencies,", "startup selection and rollback target."},
+    doctor = {"ccpm doctor", "", "Offline diagnostics for bug reports.", "Includes boot settings, cache health", "and last command failure."},
+    rollback = {"ccpm rollback <name>", "", "Activate previous cached install offline.", "Pins its exact commit to stop updates.", "Resume: ccpm track <name> [branch]"},
+    prune = {"ccpm prune [--dry-run]", "", "Remove unused cached package versions.", "Keeps active and previous root graphs.", "--dry-run previews deletions."},
+    uninstall = {"ccpm uninstall", "", "Remove ccpm and its startup hooks.", "Keeps user startup files and cache."},
     install = {
         "ccpm install <name> [options]", "",
         "--repo owner/repo", "  Default: " .. settings.get("ccpm.default_repo"),
-        "Choose one source:", "  --branch name (default: main)",
+        "Source default: runtime / stable release",
+        "Choose one source:", "  --branch name (development)",
         "  --version 1.2.3 (tag v1.2.3)", "  --commit <40-character SHA>",
         "--startup", "  Run this program at boot.", "",
         "Dependencies install automatically.", "Run it now: ccpm run <name>",
     },
     update = {"ccpm update [name]", "", "Update one or all installed packages.",
-        "Only branch-tracked packages change.", "Pinned versions and commits stay fixed."},
+        "Stable and tracked branches can change.", "Pinned versions and commits stay fixed."},
     pin = {"ccpm pin <name> --version 1.2.3", "ccpm pin <name> --commit <SHA>", "",
         "Install and pin a release or commit.", "Use a full 40-character commit SHA.",
         "Resume updates: ccpm track <name>"},
@@ -693,14 +749,15 @@ local helpTopics = {
         "pinned/tracking state and startup choice.", "Dependencies are included with each root",
         "and are not listed separately."},
     available = {"ccpm available [options]", "", "List packages in a repository.",
-        "--repo owner/repo", "Choose one source:", "  --branch name (default: main)",
+        "--repo owner/repo", "Choose one source:", "  --branch name (development)",
+        "Default: runtime source / stable release",
         "  --version 1.2.3", "  --commit <40-character SHA>",
         "Default repo: " .. settings.get("ccpm.default_repo")},
     set = {"ccpm set", "  Show current boot settings.", "ccpm set auto-update <on|off>",
         "  Check tracked packages at boot.", "ccpm set startup <name|off>",
         "  Choose a program or disable launch.", "", "Changes are saved in /.settings."},
-    ["self-update"] = {"ccpm self-update [branch]", "", "Update ccpm and its startup script.",
-        "Default branch: main", "Repo: " .. settings.get("ccpm.default_repo"), "Installed packages are updated separately",
+    ["self-update"] = {"ccpm self-update [options]", "", "--branch | --version | --commit",
+        "Default: stable release", "Repo: " .. settings.get("ccpm.default_repo"), "Installed packages are updated separately",
         "with ccpm update."},
     startup = {"ccpm startup", "", "Check for updates, then launch the",
         "selected program. Normally run at boot.", "Inspect boot settings with ccpm set."},
@@ -718,7 +775,10 @@ local function printHelp(topic)
         "list         Inspect installed packages", "run          Run a program",
         "update       Update tracked packages", "pin          Keep a release or commit",
         "track        Follow a branch", "remove       Remove a package",
-        "set          Boot settings", "self-update  Update ccpm itself", "",
+        "set          Boot settings", "self-update  Update ccpm itself",
+        "version/info Inspect versions", "doctor       Diagnose problems",
+        "rollback     Restore previous install", "prune        Clean unused cache",
+        "uninstall    Remove the manager", "",
         "Details: ccpm help <command>", "Example: ccpm help install",
         "Also: ccpm <command> --help",
     })
@@ -732,6 +792,7 @@ local function startupNotice(name)
     else
         print("Runs at the next boot.")
     end
+    if fs.exists("/startup.lua") then print("An existing startup runs first; loops there can delay ccpm.") end
 end
 
 local function commandInstall()
@@ -740,7 +801,7 @@ local function commandInstall()
     if not name or #positional ~= 1 then fail("Usage: ccpm install <name> [options]", 1) end
     local repository = options.repo or settings.get("ccpm.default_repo")
     validateRepository(repository)
-    local selector = selectorFromOptions(options, "main")
+    local selector = selectorFromOptions(options, repository)
     local state = loadState()
     installRoot(state, name, repository, selector, nil, options.startup)
     if options.startup then
@@ -765,7 +826,7 @@ local function commandUpdate()
     local failures = {}
     for _, rootName in ipairs(sortedKeys(state.roots)) do
         local root = state.roots[rootName]
-        if root.selector.kind == "branch" then
+        if root.selector.kind == "branch" or root.selector.kind == "stable" then
             local ok, reason = pcall(updateRoot, state, rootName, false)
             if not ok then
                 failures[#failures + 1] = rootName .. ": " .. tostring(reason)
@@ -784,8 +845,8 @@ local function commandPin()
     local name = args[2]
     if not name then fail("Usage: ccpm pin <name> --version x|--commit sha", 1) end
     if options.branch then fail("Use 'ccpm track' to follow a branch", 1) end
+    if not options.version and not options.commit then fail("Pin requires --version or --commit", 1) end
     local selector = selectorFromOptions(options)
-    if selector.kind == "branch" then fail("Pin requires --version or --commit", 1) end
     local state = loadState()
     local root = state.roots[name]
     if not root then fail("Package is not installed: " .. name, 1) end
@@ -852,7 +913,7 @@ local function commandAvailable()
     local positional, options = parseOptions(args, 2, {repo=true, branch=true, version=true, commit=true})
     if #positional ~= 0 then fail("Unexpected arguments to available", 1) end
     local repository = options.repo or settings.get("ccpm.default_repo")
-    local selector = selectorFromOptions(options, "main")
+    local selector = selectorFromOptions(options, repository)
     local commit = resolveCommit(repository, selector)
     local manifest = getManifest(repository, commit)
     local names = sortedKeys(manifest.packages)
@@ -864,6 +925,7 @@ local function commandAvailable()
         lines[#lines + 1] = ""
         lines[#lines + 1] = name .. " " .. packageDefinition.version
         lines[#lines + 1] = "  " .. packageDefinition.kind
+        if packageDefinition.requires and packageDefinition.requires.turtle then lines[#lines + 1] = "  Requires: turtle (digs blocks)" end
         if type(packageDefinition.description) == "string" then lines[#lines + 1] = "  " .. packageDefinition.description end
     end
     lines[#lines + 1] = ""
@@ -897,6 +959,7 @@ local function commandSet()
             local root = state.roots[value]
             if not root then fail("Package is not installed: " .. value, 1) end
             if state.packages[root.node].kind ~= "program" then fail("Startup package must be a program", 1) end
+            if state.packages[root.node].requires and state.packages[root.node].requires.turtle and not turtle then fail(value .. " requires a turtle", 1) end
         end
         saveSettings({ ["ccpm.startup_package"] = value })
         if value == "" then print("Startup program disabled") else startupNotice(value) end
@@ -906,13 +969,17 @@ local function commandSet()
 end
 
 local function commandSelfUpdate()
-    local branch = args[2] or "main"
-    local repository = settings.get("ccpm.default_repo")
-    local commit = resolveCommit(repository, { kind = "branch", value = branch })
+    local positional, options = parseOptions(args, 2, {repo=true, branch=true, version=true, commit=true})
+    if #positional > 1 or (#positional == 1 and options.branch) then fail("Usage: ccpm self-update [options]", 1) end
+    if positional[1] then options.branch = positional[1] end
+    local repository = options.repo or settings.get("ccpm.default_repo")
+    local selector = (options.branch or options.version or options.commit) and selectorFromOptions(options)
+        or {kind="stable", value="latest"}
+    local commit = resolveCommit(repository, selector)
     local base = "https://raw.githubusercontent.com/" .. repository .. "/" .. commit .. "/"
     local manager, startup = request(base .. "ccpm.lua"), request(base .. "startup.lua")
     local installer = assert(load(startup, "@startup.lua", "t", _ENV))("--installer")
-    installer.install(manager, startup)
+    installer.install(manager, startup, {schema=1, repo=repository, selector=selector, commit=commit})
     print("Updated ccpm to " .. commit:sub(1, 7))
 end
 
@@ -921,10 +988,11 @@ local function commandStartup()
         local state = loadState()
         if settings.get("ccpm.auto_update") then
             for _, name in ipairs(sortedKeys(state.roots)) do
-                if state.roots[name].selector.kind == "branch" then
+                if state.roots[name].selector.kind == "branch" or state.roots[name].selector.kind == "stable" then
                     local ok, reason = pcall(updateRoot, state, name, false)
                     if not ok then
                         printError("Update failed for " .. name .. "; using installed version: " .. tostring(reason))
+                        pcall(writeFile, CCPM_ROOT .. "/last-error.txt", ("startup update " .. name .. ": " .. tostring(reason)):sub(1, 2048))
                         state = loadState()
                     end
                 end
@@ -940,6 +1008,179 @@ local function commandStartup()
     end
 end
 
+local function runtimeLines()
+    local lines = {"ccpm " .. VERSION, "Platform: " .. tostring(_HOST or (os.version and os.version()) or "unknown")}
+    local raw = readFile(CCPM_ROOT .. "/runtime.json")
+    if raw then
+        local runtime = decodeJson(raw, "runtime metadata")
+        lines[#lines+1] = "Runtime repo: " .. tostring(runtime.repo)
+        lines[#lines+1] = "Runtime commit: " .. tostring(runtime.commit)
+        if runtime.selector then lines[#lines+1] = "Runtime source: " .. tostring(runtime.selector.kind) .. " " .. tostring(runtime.selector.value) end
+    else lines[#lines+1] = "Runtime source: unknown (run self-update)" end
+    return lines
+end
+
+local function commandVersion() display(runtimeLines()) end
+
+local function commandInfo()
+    local name = args[2]
+    if not name then fail("Usage: ccpm info <name>", 1) end
+    local state = withLock(loadState)
+    local root = state.roots[name]
+    if not root then fail("Package is not installed: " .. name, 1) end
+    local node = assert(state.packages[root.node], "Missing package metadata")
+    local lines = {name .. " " .. node.version, "Kind: " .. node.kind, "Repo: " .. root.repo,
+        "Commit: " .. root.resolved, "Source: " .. root.selector.kind .. " " .. root.selector.value,
+        "Path: " .. node.path, "Startup: " .. tostring(settings.get("ccpm.startup_package") == name),
+        "Previous: " .. (root.previous and root.previous.resolved or "none")}
+    if node.description then lines[#lines+1] = node.description end
+    if node.requires and node.requires.turtle then lines[#lines+1] = "Requires: turtle" end
+    for _, key in ipairs(node.dependencies or {}) do
+        local dependency = state.packages[key]
+        lines[#lines+1] = "Dependency: " .. (dependency and (dependency.name .. " " .. dependency.version) or ("MISSING " .. key))
+    end
+    display(lines)
+end
+
+local function reachablePackages(state, includePrevious)
+    local keep = {}
+    local function visit(key)
+        if keep[key] then return end
+        local node = state.packages[key]
+        if not node then fail("Missing package metadata: " .. tostring(key), 1) end
+        keep[key] = node
+        for _, dependency in ipairs(node.dependencies or {}) do visit(dependency) end
+    end
+    for _, root in pairs(state.roots) do
+        visit(root.node)
+        if includePrevious and root.previous then visit(root.previous.node) end
+    end
+    return keep
+end
+
+local function verifyCachedNode(node)
+    if node.path ~= packagePath(node.repo, node.commit, node.name) then fail("Invalid cache path for " .. node.name, 1) end
+    if readFile(node.path .. "/.complete") ~= node.commit then fail("Incomplete cache: " .. node.path, 1) end
+    for _, target in ipairs(node.files or (node.entrypoint and {node.entrypoint} or {})) do
+        validateRelativePath(target, "cached file")
+        if not fs.exists(node.path .. "/" .. target) or fs.isDir(node.path .. "/" .. target) then fail("Missing cached file: " .. node.path .. "/" .. target, 1) end
+    end
+end
+
+local function commandDoctor()
+    local lines = {}
+    local ok, result = pcall(runtimeLines)
+    if ok then lines = result else lines[1] = "Runtime metadata error: " .. tostring(result) end
+    local function add(label, value) lines[#lines+1] = label .. ": " .. tostring(value) end
+    add("HTTP API", http and "enabled (network not probed)" or "DISABLED")
+    add("Turtle", not not turtle)
+    add("CraftOS startup", settings.get("shell.allow_startup", true))
+    add("Boot hook", fs.exists("/startup/10-ccpm.lua"))
+    add("Runtime recovery pending", fs.exists(CCPM_ROOT .. "/runtime-update/pending.json"))
+    add("Startup package", settings.get("ccpm.startup_package", ""))
+    add("Automatic updates", settings.get("ccpm.auto_update"))
+    add("Default repository", settings.get("ccpm.default_repo"))
+    if fs.getFreeSpace then add("Free bytes", fs.getFreeSpace(CCPM_ROOT)) end
+    if fs.exists("/startup.lua") or (fs.exists("/startup") and not fs.isDir("/startup")) then
+        lines[#lines+1] = "User startup runs first; a loop there can prevent ccpm boot."
+    end
+    local stateOk, state = pcall(withLock, loadState)
+    if not stateOk then add("State ERROR", state) else
+        add("Installed roots", #sortedKeys(state.roots))
+        local healthy, problem = pcall(function()
+            for _, node in pairs(reachablePackages(state, true)) do
+                verifyCachedNode(node)
+            end
+            local startup = settings.get("ccpm.startup_package", "")
+            if startup ~= "" and not state.roots[startup] then fail("Startup package is not installed: " .. startup, 1) end
+        end)
+        add("Cache", healthy and "OK" or ("ERROR " .. tostring(problem)))
+    end
+    local lastError = readFile(CCPM_ROOT .. "/last-error.txt")
+    add("Last failure", lastError or "none recorded")
+    lines[#lines+1] = "Report: https://github.com/FottenSC/computerCraft/issues/new/choose"
+    display(lines)
+end
+
+local function commandRollback()
+    local name = args[2]
+    if not name then fail("Usage: ccpm rollback <name>", 1) end
+    local state = loadState()
+    local root = state.roots[name]
+    if not root or not root.previous then fail("No previous installation for " .. name, 1) end
+    local previous = root.previous
+    -- Check every cached dependency without touching the network or state.
+    local graph = reachablePackages({roots={[name]=previous}, packages=state.packages}, false)
+    for _, node in pairs(graph) do
+        verifyCachedNode(node)
+    end
+    validateModuleProviders(graph)
+    local nextRoot = {}
+    for key, value in pairs(previous) do nextRoot[key] = value end
+    nextRoot.selector = {kind="commit", value=previous.resolved}
+    local oldRoot = {}
+    for key, value in pairs(root) do if key ~= "previous" then oldRoot[key] = value end end
+    nextRoot.previous = oldRoot
+    state.roots[name] = nextRoot
+    saveState(state)
+    print("Rolled back " .. name .. " to " .. previous.resolved:sub(1, 7) .. " (pinned)")
+end
+
+local function commandPrune()
+    local positional, options = parseOptions(args, 2, {["dry-run"]=true})
+    if #positional > 0 then fail("Usage: ccpm prune [--dry-run]", 1) end
+    local state = loadState()
+    local keep, paths = reachablePackages(state, true), {}
+    for _, node in pairs(keep) do paths[node.path] = true end
+    local deletions = {}
+    if fs.exists(STORE_ROOT) then
+        for _, repo in ipairs(fs.list(STORE_ROOT)) do
+            local repoPath = STORE_ROOT .. "/" .. repo
+            if fs.isDir(repoPath) then for _, sha in ipairs(fs.list(repoPath)) do
+                local commitPath = repoPath .. "/" .. sha
+                if #sha == 40 and sha:match("^[0-9a-f]+$") and fs.isDir(commitPath) then
+                    for _, name in ipairs(fs.list(commitPath)) do
+                        local path = commitPath .. "/" .. name
+                        if fs.isDir(path) and not paths[path] then
+                            local raw = readFile(path .. "/.package.json")
+                            local ok, metadata = pcall(decodeJson, raw or "", "cached metadata")
+                            if ok and type(metadata.repo)=="string" and type(metadata.name)=="string"
+                                and metadata.commit == sha and packagePath(metadata.repo, sha, metadata.name) == path then
+                                deletions[#deletions+1] = path
+                            end
+                        end
+                    end
+                end
+            end end
+        end
+    end
+    if not options["dry-run"] then
+        state.packages = keep
+        saveState(state)
+    end
+    for _, path in ipairs({STAGING_ROOT, CCPM_ROOT .. "/backups"}) do
+        if fs.exists(path) then
+            print((options["dry-run"] and "Would clear " or "Clearing ") .. path)
+            if not options["dry-run"] then fs.delete(path) end
+        end
+    end
+    for _, path in ipairs(deletions) do
+        print((options["dry-run"] and "Would remove " or "Removing ") .. path)
+        if not options["dry-run"] then fs.delete(path) end
+    end
+    print(#deletions .. " unused cache directories" .. (options["dry-run"] and " (preview)" or " removed"))
+end
+
+local function commandUninstall()
+    local source = readFile("/startup/10-ccpm.lua") or readFile("/startup.lua")
+    if not source or source:sub(1, #"-- ccpm runtime recovery and startup.") ~= "-- ccpm runtime recovery and startup." then fail("Owned runtime installer missing; run bootstrap to repair it first", 1) end
+    local installer = assert(load(source, "@ccpm-installer", "t", _ENV))("--installer")
+    if not installer.uninstall then fail("Update ccpm before uninstalling", 1) end
+    saveSettings({["ccpm.startup_package"]="", ["ccpm.auto_update"]=false})
+    installer.uninstall()
+    print("ccpm removed. User startup files and /.ccpm package cache were retained.")
+end
+
 local commands = {
     install = commandInstall,
     update = commandUpdate,
@@ -952,6 +1193,12 @@ local commands = {
     set = commandSet,
     ["self-update"] = commandSelfUpdate,
     startup = commandStartup,
+    version = commandVersion,
+    info = commandInfo,
+    doctor = commandDoctor,
+    rollback = commandRollback,
+    prune = commandPrune,
+    uninstall = commandUninstall,
     help = function() printHelp(args[2]) end,
 }
 
@@ -965,9 +1212,10 @@ end
 local ok, reason = xpcall(function()
     -- Only intercept help in command position; program arguments stay intact.
     if #args == 2 and (args[2] == "--help" or args[2] == "-h") then return printHelp(command) end
-    local maximum = { update=2, track=3, remove=2, list=1, set=3, ["self-update"]=2, startup=1, help=2 }
+    local maximum = { update=2, track=3, remove=2, list=1, set=3, startup=1, help=2, version=1, info=2, doctor=1, rollback=2, uninstall=1 }
     if maximum[command] and #args > maximum[command] then fail("Unexpected arguments to " .. command, 1) end
-    if command == "run" or command == "startup" or command == "help" or command == "available" or command == "list" then
+    if command == "run" or command == "startup" or command == "help" or command == "available" or command == "list"
+        or command == "version" or command == "info" or command == "doctor" then
         return handler()
     end
     return withLock(handler)
@@ -975,6 +1223,9 @@ end, function(problem)
     return tostring(problem):gsub("^.-:%d+:%s*", "")
 end)
 if not ok then
+    if command ~= "doctor" and command ~= "help" then
+        pcall(writeFile, CCPM_ROOT .. "/last-error.txt", (command .. ": " .. reason):sub(1, 2048))
+    end
     -- CraftOS prints an uncaught error and returns failure to shell.execute.
     -- Printing here too would show every command error twice.
     error("ccpm: " .. reason .. "\nHelp: ccpm help " .. command, 0)

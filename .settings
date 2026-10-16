@@ -1,3 +1,0 @@
-{
-  [ "shell.allow_startup" ] = true,
-}

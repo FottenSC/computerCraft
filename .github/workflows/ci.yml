@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -31,6 +32,24 @@ jobs:
         run: |
           python tools/fetch_ccpm_test_apis.py "$RUNNER_TEMP/ccpm-apis"
           CCPM_TEST_ROOT="$PWD" CCPM_UPSTREAM_DIR="$RUNNER_TEMP/ccpm-apis" lua5.2 tests/ccpm_runtime_test.lua
+      - name: Install pinned CraftOS-PC 2.8.3
+        run: |
+          sudo apt-get install --yes libpulse0 libxss1 libasound2t64
+          mkdir -p "$RUNNER_TEMP/craftos"
+          cd "$RUNNER_TEMP/craftos"
+          curl --fail --location --retry 3 -o craftos.AppImage https://github.com/MCJack123/craftos2/releases/download/v2.8.3/CraftOS-PC.x86_64.AppImage
+          echo 'f25536c7a05f67827fe44573ff65627cbe595e13c75815ef86a4e1f3bd33a88c  craftos.AppImage' | sha256sum --check
+          chmod +x craftos.AppImage
+          ./craftos.AppImage --appimage-extract > /dev/null
+      - name: Test real CraftOS I/O and boot recovery
+        run: python tools/run_craftos_smoke.py --craftos "$RUNNER_TEMP/craftos/squashfs-root/AppRun" --output "$RUNNER_TEMP/craftos-smoke"
+      - name: Upload emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: craftos-smoke-${{ github.sha }}
+          path: ${{ runner.temp }}/craftos-smoke/
+          if-no-files-found: ignore
       - name: Build distributable
         run: python tools/ccpm_ci.py build dist
       - uses: actions/upload-artifact@v4

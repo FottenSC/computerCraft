@@ -8,32 +8,33 @@ permissions:
   contents: write
 
 jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
   release:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-      - name: Install Lua 5.2
-        run: sudo apt-get update && sudo apt-get install --yes lua5.2 lua-cjson
-      - name: Test repository tooling
-        run: python -m unittest discover -s tests -v
-      - name: Check Lua syntax
-        run: git ls-files -z -- '*.lua' | xargs -0 -r -n1 luac5.2 -p
-      - name: Test ccpm runtime
-        run: CCPM_TEST_ROOT="$PWD" lua5.2 tests/ccpm_runtime_test.lua
-      - name: Test against pinned CraftOS APIs
-        run: |
-          python tools/fetch_ccpm_test_apis.py "$RUNNER_TEMP/ccpm-apis"
-          CCPM_TEST_ROOT="$PWD" CCPM_UPSTREAM_DIR="$RUNNER_TEMP/ccpm-apis" lua5.2 tests/ccpm_runtime_test.lua
       - name: Validate release version
         run: python tools/ccpm_ci.py release-check "$GITHUB_REF_NAME"
-      - name: Build release files
-        run: python tools/ccpm_ci.py build dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: ccpm-${{ github.sha }}
+          path: dist
+      - name: Verify tested distribution
+        working-directory: dist
+        run: sha256sum --check checksums.sha256
       - name: Archive complete distribution
         run: tar -czf ccpm.tar.gz -C dist .
-      - name: Publish GitHub release
+      - name: Prepare draft release for acceptance testing
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" ccpm.tar.gz dist/bootstrap.lua dist/ccpm.lua dist/startup.lua dist/ccpm-package.json dist/index.json dist/checksums.sha256 --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+        run: |
+          flags=(--draft --latest=false)
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" ccpm.tar.gz dist/bootstrap.lua dist/ccpm.lua dist/startup.lua dist/ccpm-package.json dist/index.json dist/checksums.sha256 --verify-tag --generate-notes --title "$GITHUB_REF_NAME" "${flags[@]}"

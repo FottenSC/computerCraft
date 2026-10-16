@@ -22,6 +22,13 @@ class ManifestTests(unittest.TestCase):
     def test_repository_manifest_is_valid(self):
         ccpm_ci.validate_manifest(self.manifest)
 
+    def test_invalid_hardware_requirements_are_rejected(self):
+        for requirements in (None, [], {"turtle": "yes"}, {"unknown": True}):
+            manifest = copy.deepcopy(self.manifest)
+            manifest["packages"]["block-checker"]["requires"] = requirements
+            with self.subTest(requirements=requirements), self.assertRaises(ccpm_ci.ValidationError):
+                ccpm_ci.validate_manifest(manifest)
+
     def test_path_traversal_is_rejected(self):
         with self.assertRaises(ccpm_ci.ValidationError):
             ccpm_ci.safe_relative_path("../startup.lua", "source")
@@ -172,9 +179,17 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual(list(output.iterdir()), [])
 
     def test_release_tag_must_match_all_packages(self):
-        ccpm_ci.release_check(self.manifest, "v1.0.0")
+        ccpm_ci.release_check(self.manifest, "v" + self.manifest["packages"]["block-checker"]["version"])
         with self.assertRaises(ccpm_ci.ValidationError):
             ccpm_ci.release_check(self.manifest, "v2.0.0")
+
+    def test_release_tag_must_match_manager_version(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "ccpm.lua").write_text('local VERSION = "0.0.1"\n')
+            tag = "v" + self.manifest["packages"]["block-checker"]["version"]
+            with mock.patch.object(ccpm_ci, "ROOT", root), self.assertRaises(ccpm_ci.ValidationError):
+                ccpm_ci.release_check(self.manifest, tag)
 
     def test_build_rejects_directories_containing_inputs_without_deleting_files(self):
         with tempfile.TemporaryDirectory() as temporary:

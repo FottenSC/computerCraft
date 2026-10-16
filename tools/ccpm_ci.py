@@ -122,6 +122,11 @@ def validate_manifest(manifest: dict, root: Path = ROOT) -> None:
             raise ValidationError(f"Package {name!r} must be an object")
         if package.get("kind") not in {"program", "library"}:
             raise ValidationError(f"Package {name!r} kind must be program or library")
+        requirements = package.get("requires", {})
+        if not isinstance(requirements, dict) or any(
+            key != "turtle" or type(value) is not bool for key, value in requirements.items()
+        ):
+            raise ValidationError(f"Package {name!r} has invalid hardware requirements")
         version = package.get("version")
         if not isinstance(version, str) or not VERSION.fullmatch(version):
             raise ValidationError(f"Package {name!r} has invalid semantic version")
@@ -171,6 +176,10 @@ def release_check(manifest: dict, tag: str) -> None:
         raise ValidationError(
             f"Tag {tag} does not match package version for: {', '.join(sorted(mismatches))}"
         )
+    runtime = (ROOT / "ccpm.lua").read_text(encoding="utf-8")
+    declared = re.search(r'local VERSION = "([^"]+)"', runtime)
+    if not declared or declared[1] != version:
+        raise ValidationError(f"Tag {tag} does not match the manager VERSION")
 
 
 def build(manifest: dict, output: Path) -> None:

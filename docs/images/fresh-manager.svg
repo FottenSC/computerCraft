@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="652" height="420" viewBox="0 0 652 420"><rect width="652" height="420" rx="8" fill="#111111"/><g fill="#eeeeee" font-family="Consolas,monospace" font-size="18" xml:space="preserve"><text x="20" y="32">&gt; ccpm set</text>
+<text x="20" y="52">Startup program: off</text>
+<text x="20" y="72">Auto-update: on</text>
+<text x="20" y="92">CraftOS startup: on</text>
+<text x="20" y="112">Default repo: FottenSC/computerCraft</text>
+<text x="20" y="132">Change: ccpm help set</text>
+<text x="20" y="152">&gt;</text></g></svg>

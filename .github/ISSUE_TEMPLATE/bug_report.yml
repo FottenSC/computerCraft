@@ -1,0 +1,32 @@
+name: Bug report
+description: Report an installation, update, startup, or package problem
+title: "[Bug]: "
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and diagnostics
+      description: Paste ccpm version and ccpm doctor output. Include Minecraft, CC:Tweaked, modpack, and emulator versions where applicable. Review for private information first.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact commands, package source and startup configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the complete error text or a screenshot.
+    validations:
+      required: true
