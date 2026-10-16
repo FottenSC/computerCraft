@@ -127,6 +127,20 @@ local function hostRead(relative)
     return value
 end
 
+-- GitHub commit responses contain nullable metadata even for valid commits.
+-- Keep this shape in both HTTP fixtures so every branch/tag operation sees it.
+local function githubCommitResponse(sha)
+    return cjson.encode({
+        sha = sha,
+        author = cjson.null,
+        committer = cjson.null,
+        commit = { verification = {
+            verified = false, reason = "unsigned",
+            signature = cjson.null, payload = cjson.null, verified_at = cjson.null,
+        } },
+    })
+end
+
 local requestCount = 0
 http = {}
 function http.get(url, _, binary)
@@ -134,7 +148,7 @@ function http.get(url, _, binary)
     requestCount = requestCount + 1
     local body
     if url:find("api.github.com", 1, true) then
-        body = cjson.encode({ sha = remoteCommit })
+        body = githubCommitResponse(remoteCommit)
     else
         local requestedCommit, relative = url:match("/([0-9a-f]+)/(.+)$")
         assert(relative, "unexpected URL " .. url)
@@ -305,7 +319,7 @@ http.get = function(url, _, binary)
     assert(binary == true, "downloads must preserve raw bytes")
     local body
     if url:find("api.github.com", 1, true) then
-        body = cjson.encode({ sha = remoteCommit })
+        body = githubCommitResponse(remoteCommit)
     elseif url:match("ccpm%-package.json$") then
         body = cjson.encode(testManifest)
     elseif failDownload then
@@ -318,6 +332,18 @@ http.get = function(url, _, binary)
         readAll = function() return body end,
         close = function() end,
     }
+end
+
+-- Nullable metadata must not weaken validation of the required commit SHA.
+for _, response in ipairs({
+    {}, {sha=cjson.null}, {sha=false}, {sha=12}, {sha={}},
+    {sha=""}, {sha="abc123"}, {sha=string.rep("g", 40)},
+}) do
+    resetFixture()
+    remoteCommit = response.sha
+    local ok, reason = pcall(ccpm, "install", "foo", "--branch", "main")
+    assert(not ok and reason:find("GitHub did not return a commit", 1, true), tostring(reason))
+    assert(not fs.exists("/.ccpm/state.json") and not _G.__ccpm_write_lock)
 end
 
 -- Valid package names must not overlap temporary download directories, even

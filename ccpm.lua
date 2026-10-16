@@ -64,7 +64,7 @@ local function writeFile(path, value)
     if not ok then error(writeError, 0) end
 end
 
-local function decodeJson(value, description)
+local function decodeJson(value, description, allowNulls)
     -- Preserve nulls so malformed fields cannot disappear during decoding.
     local ok, result = pcall(textutils.unserializeJSON, value, { parse_null = true })
     if not ok or type(result) ~= "table" then
@@ -76,7 +76,7 @@ local function decodeJson(value, description)
             for _, child in pairs(item) do rejectNulls(child) end
         end
     end
-    rejectNulls(result)
+    if not allowNulls then rejectNulls(result) end
     return result
 end
 
@@ -234,7 +234,8 @@ local function resolveCommit(repository, selector)
     if selector.kind == "version" and not reference:match("^v") then reference = "v" .. reference end
     reference = (selector.kind == "version" and "refs/tags/" or "refs/heads/") .. reference
     local url = "https://api.github.com/repos/" .. repository .. "/commits/" .. urlEncode(reference)
-    local result = decodeJson(request(url), "GitHub commit response")
+    -- GitHub's optional metadata may be null; only the SHA is required here.
+    local result = decodeJson(request(url), "GitHub commit response", true)
     if type(result.sha) ~= "string" or #result.sha ~= 40 or not result.sha:match("^[0-9a-fA-F]+$") then
         fail("GitHub did not return a commit for " .. repository .. "@" .. reference, 1)
     end
