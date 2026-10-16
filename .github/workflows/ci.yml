@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install Lua 5.2
+        run: sudo apt-get update && sudo apt-get install --yes lua5.2 lua-cjson
+      - name: Test repository tooling
+        run: python -m unittest discover -s tests -v
+      - name: Validate package manifest
+        run: python tools/ccpm_ci.py validate
+      - name: Check Lua syntax
+        run: find . -type f -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.2 -p
+      - name: Test ccpm runtime
+        run: CCPM_TEST_ROOT="$PWD" lua5.2 tests/ccpm_runtime_test.lua
+      - name: Test against pinned CraftOS APIs
+        run: |
+          python tools/fetch_ccpm_test_apis.py "$RUNNER_TEMP/ccpm-apis"
+          CCPM_TEST_ROOT="$PWD" CCPM_UPSTREAM_DIR="$RUNNER_TEMP/ccpm-apis" lua5.2 tests/ccpm_runtime_test.lua
+      - name: Build distributable
+        run: python tools/ccpm_ci.py build dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ccpm-${{ github.sha }}
+          path: dist/
+          include-hidden-files: true
+          if-no-files-found: error

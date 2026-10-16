@@ -1,6 +1,11 @@
 # Compiled Lua sources
 luac.out
 
+# Generated CI output
+dist/
+__pycache__/
+*.pyc
+
 # ComputerCraft settings
 .settings
 

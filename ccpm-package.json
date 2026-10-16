@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "packages": {
+    "block-checker": {
+      "version": "1.0.0",
+      "kind": "program",
+      "description": "A turtle program which digs blocks not present in a configurable allow-list.",
+      "entrypoint": "main.lua",
+      "files": [
+        {
+          "source": "projects/blockChecker/main.lua",
+          "target": "main.lua"
+        }
+      ],
+      "dependencies": {
+        "ccpm-log": "*"
+      }
+    },
+    "ccpm-log": {
+      "version": "1.0.0",
+      "kind": "library",
+      "description": "Small timestamped logging helpers for CC:Tweaked programs.",
+      "files": [
+        {
+          "source": "libs/ccpm/log.lua",
+          "target": "ccpm/log.lua"
+        }
+      ],
+      "dependencies": {}
+    }
+  }
+}
