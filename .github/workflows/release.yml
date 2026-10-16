@@ -20,7 +20,7 @@ jobs:
       - name: Test repository tooling
         run: python -m unittest discover -s tests -v
       - name: Check Lua syntax
-        run: find . -type f -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.2 -p
+        run: git ls-files -z -- '*.lua' | xargs -0 -r -n1 luac5.2 -p
       - name: Test ccpm runtime
         run: CCPM_TEST_ROOT="$PWD" lua5.2 tests/ccpm_runtime_test.lua
       - name: Test against pinned CraftOS APIs

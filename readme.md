@@ -79,6 +79,52 @@ set ccpm.startup_package block-checker
 
 `ccpm.auto_update` only moves branch-tracked packages. Version- and commit-pinned packages remain fixed until explicitly pinned, tracked, or reinstalled.
 
+## Local API references
+
+Requires Python 3.11 or newer. To collect documentation for an installed modpack,
+run this from the repository folder on your development computer:
+
+```powershell
+python tools/fetch_docs.py --instance "C:\path\to\your\minecraft-instance"
+```
+
+The fetcher reads the instance's mod metadata, extracts bundled Lua APIs and help
+files, and downloads selected official documentation and API source at the commits
+in `docs/sources.json`. It never modifies the instance. The initial source list
+targets FTB Skies 2: Aero 1.13.0, Minecraft 1.21.1, and NeoForge 21.1.250.
+
+Open `.reference/index.md` for installed versions, reference paths, and coverage.
+Bundled files match the installed JAR; upstream snapshots are labelled **exact
+release**, **series reference**, or **unverified reference**. Detected integrations
+without a curated source are listed as gaps. Original license notices are retained.
+
+The instance path is remembered in the ignored `.reference/local.json`. After a
+modpack update, refresh with:
+
+```text
+python tools/fetch_docs.py
+```
+
+Completed snapshots are checked and reused. Changed mod versions are flagged and
+their old upstream pins are skipped; update `docs/sources.json` with matching
+release commits before relying on those references. Failed downloads are reported
+and return a nonzero exit status without replacing completed snapshots. To extract
+only installed references without downloading anything:
+
+```text
+python tools/fetch_docs.py --bundled-only
+```
+
+The source list and fetcher are tracked in Git. Downloaded references, per-file
+checksums, the installed-mod report, and the instance path stay in `.reference/`,
+which is ignored. `AGENTS.md` points coding work to this cache.
+
+Search the cache explicitly, including ignored files:
+
+```text
+rg --no-ignore "getEnergy" .reference/snapshots
+```
+
 ## Package manifest
 
 Packages live in `ccpm-package.json` at the repository root. A program declares an entrypoint and may depend on libraries:

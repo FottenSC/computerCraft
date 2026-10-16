@@ -5,6 +5,7 @@ luac.out
 dist/
 __pycache__/
 *.pyc
+.reference/
 
 # ComputerCraft settings
 .settings

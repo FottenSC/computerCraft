@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "target": {
+    "pack": "FTB Skies 2: Aero",
+    "pack_version": "1.13.0",
+    "minecraft": "1.21.1",
+    "loader": "neoforge-21.1.250"
+  },
+  "sources": [
+    {
+      "id": "cc-tweaked",
+      "mod_id": "computercraft",
+      "version": "1.119.0",
+      "repository": "cc-tweaked/CC-Tweaked",
+      "ref": "v1.21.1-1.119.0",
+      "commit": "5f76d42e4d307f405966fbd0d22e05bd3ded2664",
+      "match": "exact release",
+      "include": ["doc/**", "projects/core/src/main/resources/data/computercraft/lua/**", "projects/core/src/main/java/dan200/computercraft/core/apis/**", "projects/common/src/main/java/dan200/computercraft/shared/peripheral/**", "projects/common/src/main/java/dan200/computercraft/shared/turtle/apis/**"]
+    },
+    {
+      "id": "advanced-peripherals",
+      "mod_id": "advancedperipherals",
+      "version": "0.7.62b",
+      "repository": "IntelligenceModding/AdvancedPeripherals",
+      "ref": "1.21.1-0.7.62b",
+      "commit": "d802ae5e964ac4f6e40e05a38157754570ffa5a1",
+      "match": "exact release",
+      "include": ["src/main/java/de/srendi/advancedperipherals/common/addons/**", "src/main/java/de/srendi/advancedperipherals/lib/**", "src/testMod/server-files/computers/**"]
+    },
+    {
+      "id": "advanced-peripherals-docs",
+      "mod_id": "advancedperipherals",
+      "version": "0.7.62b",
+      "repository": "IntelligenceModding/Advanced-Peripherals-Documentation",
+      "ref": "documentation snapshot, 2026-10-16",
+      "commit": "101bb30929c236aa7225acdd9493c41227da2665",
+      "match": "series reference",
+      "note": "The official 0.7 documentation has no tag matching 0.7.62b. Check signatures against the exact-release Java source when they differ.",
+      "include": ["docs/**", "examples/**"]
+    },
+    {
+      "id": "cc-sable",
+      "mod_id": "cc_sable",
+      "version": "1.3.4",
+      "repository": "TechTastic/CC-Sable",
+      "ref": "v1.3.4",
+      "commit": "728c0765897171d3534767d0eb70860dc3ab7e37",
+      "match": "exact release",
+      "include": ["docs/**", "common/src/main/java/**", "common/src/main/resources/data/computercraft/lua/**", "changelog.md"]
+    },
+    {
+      "id": "create-avionics",
+      "mod_id": "create_avionics",
+      "version": "0.6.0",
+      "repository": "SolAstrius/CreateAvionics",
+      "ref": "v0.6.0",
+      "commit": "7f46c9e03a0be519c35dc90b4ef6f6340a844bbb",
+      "match": "exact release",
+      "include": ["doc/**", "common/src/main/java/ink/astrius/create_avionics/compat/**", "common/src/main/java/ink/astrius/create_avionics/api/**", "CODEMAP.md", "CHANGELOG.md"]
+    },
+    {
+      "id": "create",
+      "mod_id": "create",
+      "version": "6.0.10",
+      "repository": "Creators-of-Create/Create",
+      "ref": "mc1.21.1-6.0.10",
+      "commit": "ac0c444d9828da3453ae8cc65338e8de063286fb",
+      "match": "exact release",
+      "include": ["src/main/java/com/simibubi/create/compat/computercraft/**"]
+    },
+    {
+      "id": "mekanism",
+      "mod_id": "mekanism",
+      "version": "10.7.19",
+      "jar": "Mekanism-1.21.1-10.7.19.85.jar",
+      "repository": "mekanism/Mekanism",
+      "ref": "v1.21.1-10.7.19.85",
+      "commit": "a00109e4856fd38b9c5b3dd7f22ce4a59cd65a80",
+      "match": "exact release",
+      "note": "The installed TOML version is 10.7.19; the JAR and release tag include build 85. Generated computer_help tables include peripheral signatures and descriptions.",
+      "include": ["src/datagen/generated/**/computer_help/**", "src/main/java/mekanism/common/integration/computer/**", "docs/Development.md"]
+    },
+    {
+      "id": "energy-meter",
+      "mod_id": "energymeter",
+      "version": "1.21.1-0.5.2",
+      "repository": "AlmostReliable/energymeter",
+      "ref": "v1.21.1-neoforge-0.5.2",
+      "commit": "ebd9896555bd859bfbc477c5aa76fb3f6ec3ba5b",
+      "match": "exact release",
+      "include": ["guidebook/**", "src/main/java/com/almostreliable/energymeter/compat/**"]
+    },
+    {
+      "id": "more-red-cc",
+      "mod_id": "moreredxcctcompat",
+      "version": "1.21.1-1.3.0",
+      "repository": "YuRaNnNzZZ/More-Red-CCT-Compat",
+      "ref": "repository snapshot, 2026-10-16",
+      "commit": "21377e8b97579ea0df3ed53efdd3d4fb561cb94d",
+      "match": "unverified reference",
+      "note": "No release tags are published. This snapshot is a reference, not a verified match to the installed binary.",
+      "include": ["src/main/java/**"]
+    },
+    {
+      "id": "draconic-evolution",
+      "mod_id": "draconicevolution",
+      "version": "3.1.4.633",
+      "repository": "Draconic-Inc/Draconic-Evolution",
+      "ref": "1.21 branch snapshot, 2026-10-16",
+      "commit": "6251e32bc93eb4bfcd910236ec1eaa6546516229",
+      "match": "unverified reference",
+      "note": "No tag matching 3.1.4.633 was found. Verify behavior in game before relying on this source snapshot.",
+      "include": ["src/main/java/com/brandon3055/draconicevolution/integration/computers/**"]
+    }
+  ]
+}
