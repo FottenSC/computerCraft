@@ -1,0 +1,190 @@
+---@meta
+-- Advanced Peripherals 0.7.62b / Minecraft 1.21.1.
+-- Source: IntelligenceModding/AdvancedPeripherals@d802ae5e964ac4f6e40e05a38157754570ffa5a1.
+-- Editor-only declarations, excluded from ccpm distributions.
+
+---@class AP.Base
+---@field getName fun(): string? Custom name, which may be absent.
+---@field getConfiguration fun(): table<string, any> Configuration and available operation limits.
+
+---Methods shared by the ME and RS bridges. Failures may return nil/zero plus an error string.
+---@class AP.StorageBridge: AP.Base
+---@field isConnected fun(): boolean
+---@field isOnline fun(): boolean?, string?
+---@field getItem fun(filter: AP.ItemFilter): AP.StoredResource?, string?
+---@field getFluid fun(filter: AP.FluidFilter): AP.StoredResource?, string?
+---@field getChemical fun(filter: AP.ChemicalFilter): AP.StoredResource?, string?
+---@field getItems fun(filter?: AP.ItemFilter): AP.StoredResource[]?, string? List stored items; this replaces legacy listItems.
+---@field getFluids fun(filter?: AP.FluidFilter): AP.StoredResource[]?, string?
+---@field getChemicals fun(filter?: AP.ChemicalFilter): AP.StoredResource[]?, string?
+---@field getCraftableItems fun(filter?: AP.ItemFilter): AP.StoredResource[]?, string?
+---@field getCraftableFluids fun(filter?: AP.FluidFilter): AP.StoredResource[]?, string?
+---@field getCells fun(): table[]?, string?
+---@field getDrives fun(): table[]?, string?
+---@field importItem fun(filter: AP.ItemFilter, source: string): integer, string? Source side is relative to the bridge, or a wired inventory name.
+---@field exportItem fun(filter: AP.ItemFilter, target: string): integer, string? Target side is relative to the bridge, or a wired inventory name.
+---@field importFluid fun(filter: AP.FluidFilter, source: string): integer, string?
+---@field exportFluid fun(filter: AP.FluidFilter, target: string): integer, string?
+---@field importChemical fun(filter: AP.ChemicalFilter, source: string): integer?, string? Requires the matching Mekanism storage integration.
+---@field exportChemical fun(filter: AP.ChemicalFilter, target: string): integer?, string?
+---@field getStoredEnergy fun(): number?, string?
+---@field getEnergyCapacity fun(): number?, string?
+---@field getEnergyUsage fun(): number?, string?
+---@field getAverageEnergyInput fun(): number?, string?
+---@field getTotalExternalItemStorage fun(): number?, string?
+---@field getTotalExternalFluidStorage fun(): number?, string?
+---@field getTotalExternalChemicalStorage fun(): number?, string?
+---@field getTotalItemStorage fun(): number?, string?
+---@field getTotalFluidStorage fun(): number?, string?
+---@field getTotalChemicalStorage fun(): number?, string?
+---@field getUsedExternalItemStorage fun(): number?, string?
+---@field getUsedExternalFluidStorage fun(): number?, string?
+---@field getUsedExternalChemicalStorage fun(): number?, string?
+---@field getUsedItemStorage fun(): number?, string?
+---@field getUsedFluidStorage fun(): number?, string?
+---@field getUsedChemicalStorage fun(): number?, string?
+---@field getAvailableExternalItemStorage fun(): number?, string?
+---@field getAvailableExternalFluidStorage fun(): number?, string?
+---@field getAvailableExternalChemicalStorage fun(): number?, string?
+---@field getAvailableItemStorage fun(): number?, string?
+---@field getAvailableFluidStorage fun(): number?, string?
+---@field getAvailableChemicalStorage fun(): number?, string?
+---@field getPatterns fun(filter?: AP.PatternFilter): AP.Pattern|AP.Pattern[]|nil, string? Returns a single match when a filter is supplied, otherwise a list.
+---@field getCraftingTasks fun(): AP.CraftingTask[]?, string?
+---@field getCraftingTask fun(id: integer): AP.CraftJob?, string?
+---@field cancelCraftingTasks fun(filter: AP.ResourceFilter): integer, string?
+---@field isCraftable fun(filter: AP.ResourceFilter): boolean, string?
+
+---Applied Energistics 2 bridge. Peripheral type: me_bridge.
+---@class AP.MEBridge: AP.StorageBridge
+---@field getCraftingTask fun(id: integer): AP.MECraftJob?, string?
+---@field craftItem fun(filter: AP.ItemFilter, cpuName?: string): AP.MECraftJob?, string?
+---@field craftFluid fun(filter: AP.FluidFilter, cpuName?: string): AP.MECraftJob|false|nil, string?
+---@field isCrafting fun(filter: AP.ResourceFilter, cpuName?: string): boolean, string?
+---@field getCraftingCPUs fun(): AP.CraftingCPU[]?, string?
+
+---Refined Storage bridge. Peripheral type: rs_bridge.
+---@class AP.RSBridge: AP.StorageBridge
+---@field craftItem fun(filter: AP.ItemFilter): AP.CraftJob?, string?
+---@field craftFluid fun(filter: AP.FluidFilter): AP.CraftJob?, string?
+---@field craftChemical fun(filter: AP.ChemicalFilter): AP.CraftJob?, string?
+---@field getCraftableChemicals fun(filter?: AP.ChemicalFilter): AP.StoredResource[]?, string?
+---@field isCrafting fun(filter: AP.ResourceFilter): boolean, string?
+
+---Fuel/operation methods depend on the block, turtle, or pocket variant.
+---@class AP.Scanner: AP.Base
+---@field getFuelLevel? fun(): integer
+---@field getMaxFuelLevel? fun(): integer
+---@field getFuelConsumptionRate? fun(): integer
+---@field setFuelConsumptionRate? fun(rate: integer): boolean?, string?
+---@field getOperationCooldown fun(name: string): integer?, string? Operation names are listed by getConfiguration.
+
+---Block coordinates are relative to the scanner. Scans may fail due to cooldown, radius, or fuel limits.
+---@class AP.GeoScanner: AP.Scanner
+---@field cost fun(radius: integer): integer?, string?
+---@field scan fun(radius: integer): AP.ScannedBlock[]?, string?
+---@field chunkAnalyze fun(): table<string, integer>?, string?
+
+---@class AP.EnvironmentDetector: AP.Scanner
+---@field getBiome fun(): string
+---@field getSkyLightLevel fun(): integer
+---@field getBlockLightLevel fun(): integer
+---@field getDayLightLevel fun(): integer
+---@field getTime fun(): integer
+---@field isSlimeChunk fun(): boolean
+---@field getDimension fun(): string
+---@field isDimension fun(dimension: string): boolean
+---@field listDimensions fun(): string[]
+---@field getMoonId fun(): integer
+---@field isMoon fun(phase: integer): boolean
+---@field getMoonName fun(): string
+---@field isRaining fun(): boolean
+---@field isThunder fun(): boolean
+---@field isSunny fun(): boolean
+---@field scanEntities fun(radius: integer): AP.ScannedEntity[]?, string?
+---@field scanCost fun(radius: integer): integer?, string?
+---@field canSleepHere fun(): boolean
+---@field canSleepPlayer fun(playerName: string): boolean, string?
+
+---@class AP.PlayerDetector: AP.Base
+---@field getOnlinePlayers fun(): string[]
+---@field getPlayerPos fun(username: string, decimals?: integer): AP.PlayerPosition? Extra fields depend on server configuration; absent/out-of-range players return nil.
+---@field getPlayersInRange fun(range: integer): string[]
+---@field getPlayersInCoords fun(first: AP.Position, second: AP.Position): string[]
+---@field getPlayersInCubic fun(x: integer, y: integer, z: integer): string[]
+---@field isPlayersInRange fun(range: integer): boolean
+---@field isPlayersInCoords fun(first: AP.Position, second: AP.Position): boolean
+---@field isPlayersInCubic fun(x: integer, y: integer, z: integer): boolean
+---@field isPlayerInRange fun(range: integer, username: string): boolean
+---@field isPlayerInCoords fun(first: AP.Position, second: AP.Position, username: string): boolean
+---@field isPlayerInCubic fun(x: integer, y: integer, z: integer, username: string): boolean
+
+---Message prefixes, brackets and colors are optional. Calls use dots, not colons.
+---@class AP.ChatBox: AP.Base
+---@field sendMessage fun(message: string, prefix?: string, brackets?: string, bracketColor?: string, range?: integer, useUTF8?: boolean): boolean?, string?
+---@field sendFormattedMessage fun(json: string, prefix?: string, brackets?: string, bracketColor?: string, range?: integer, useUTF8?: boolean): boolean?, string?
+---@field sendMessageToPlayer fun(message: string, username: string, prefix?: string, brackets?: string, bracketColor?: string, range?: integer, useUTF8?: boolean): boolean?, string?
+---@field sendFormattedMessageToPlayer fun(json: string, username: string, prefix?: string, brackets?: string, bracketColor?: string): boolean?, string? Further optional arguments have an upstream index conflict in 0.7.62b and are intentionally omitted.
+---@field sendToastToPlayer fun(message: string, title: string, username: string, prefix?: string, brackets?: string, bracketColor?: string, range?: integer, useUTF8?: boolean): boolean?, string?
+---@field sendFormattedToastToPlayer fun(json: string, titleJson: string, username: string, prefix?: string, brackets?: string, bracketColor?: string, range?: integer, useUTF8?: boolean): boolean?, string?
+
+---@class AP.InventoryManager: AP.Base
+---@field getOwner fun(): string
+---@field addItemToPlayer fun(source: string, filter: AP.ItemFilter): integer, string?
+---@field removeItemFromPlayer fun(target: string, filter: AP.ItemFilter): integer, string?
+---@field getItems fun(): AP.InventoryItem[]
+---@field getItemsChest fun(target: string): AP.InventoryItem[]?, string?
+---@field getArmor fun(): AP.InventoryItem[]
+---@field isPlayerEquipped fun(): boolean
+---@field isWearing fun(index: integer): boolean
+---@field getEmptySpace fun(): integer Number of empty inventory slots.
+---@field isSpaceAvailable fun(): boolean
+---@field getFreeSlot fun(): integer
+---@field getItemInHand fun(): AP.InventoryItem
+---@field getItemInOffHand fun(): AP.InventoryItem
+
+---@class AP.EnergyDetector: AP.Base
+---@field getTransferRate fun(): integer
+---@field getTransferRateLimit fun(): integer
+---@field setTransferRateLimit fun(rate: integer)
+
+---@class AP.BlockReader: AP.Base
+---@field getBlockName fun(): string
+---@field getBlockData fun(): any
+---@field getBlockStates fun(): table<string, any>?
+---@field isTileEntity fun(): boolean
+
+---@class AP.NBTStorage: AP.Base
+---@field read fun(): any
+---@field writeJson fun(snbt: string): boolean?, string?
+---@field writeTable fun(data: table): boolean?, string?
+
+---@class AP.Compass: AP.Base
+---@field getFacing fun(): string
+
+---@class AP.Chunky: AP.Base
+
+---MineColonies integration. Detailed colony records remain open tables.
+---@class AP.ColonyIntegrator: AP.Base
+---@field isInColony fun(): boolean
+---@field isWithin fun(position: AP.Position): boolean
+---@field getColonyID fun(): integer
+---@field getColonyName fun(): string
+---@field getColonyStyle fun(): string
+---@field isActive fun(): boolean
+---@field getHappiness fun(): number
+---@field getLocation fun(): AP.Position
+---@field isUnderAttack fun(): boolean
+---@field isUnderRaid fun(): boolean
+---@field amountOfCitizens fun(): integer
+---@field maxOfCitizens fun(): integer
+---@field amountOfGraves fun(): integer
+---@field amountOfConstructionSites fun(): integer
+---@field getCitizens fun(): table[]
+---@field getVisitors fun(): table[]
+---@field getBuildings fun(): table[]
+---@field getWorkOrders fun(): table[]
+---@field getResearch fun(): table
+---@field getWorkOrderResources fun(id: integer): table[]
+---@field getBuilderResources fun(position: AP.Position): table[]
+---@field getRequests fun(): table[]

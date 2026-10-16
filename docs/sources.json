@@ -25,7 +25,13 @@
       "ref": "1.21.1-0.7.62b",
       "commit": "d802ae5e964ac4f6e40e05a38157754570ffa5a1",
       "match": "exact release",
-      "include": ["src/main/java/de/srendi/advancedperipherals/common/addons/**", "src/main/java/de/srendi/advancedperipherals/lib/**", "src/testMod/server-files/computers/**"]
+      "include": [
+        "src/main/java/de/srendi/advancedperipherals/common/addons/**",
+        "src/main/java/de/srendi/advancedperipherals/lib/**",
+        "src/testMod/server-files/computers/**",
+        "src/main/java/de/srendi/advancedperipherals/common/util/inventory/**",
+        "src/main/java/de/srendi/advancedperipherals/common/util/LuaConverter.java"
+      ]
     },
     {
       "id": "advanced-peripherals-docs",

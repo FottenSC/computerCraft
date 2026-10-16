@@ -1,5 +1,8 @@
 # Developing ccpm
 
+For autocomplete, hover documentation and parameter hints in VS Code, see
+[IntelliSense setup and Advanced Peripherals coverage](intellisense.md).
+
 ## Local API references
 
 Requires Python 3.11 or newer. To collect documentation for an installed modpack,

@@ -102,4 +102,8 @@ Run `ccpm help` or `ccpm help <command>` for command details. Help and package l
 
 ## Contribute
 
+VS Code users can use [the IntelliSense setup](docs/intellisense.md) for core
+CC:Tweaked APIs and Advanced Peripherals 0.7.62b. The project includes editor
+definitions and a small [peripheral example](examples/advanced-peripherals.lua).
+
 See [development and package manifests](docs/development.md), [testing and releases](docs/testing.md), [contributing](CONTRIBUTING.md), and the [changelog](CHANGELOG.md). Downloaded third-party API references retain their upstream notices and are not included in the distribution.

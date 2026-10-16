@@ -1,8 +1,10 @@
 {
     "craftos-pc.additionalArguments": "--start-dir E:/DevShitPosts/computerCraft",
     "Lua.workspace.library": [
-        "${addons}/cc-tweaked/module/library"
+        "${addons}/cc-tweaked/module/library",
+        "${workspaceFolder}/types/advanced-peripherals"
     ],
+    "Lua.workspace.ignoreDir": [".reference", "dist"],
     "Lua.runtime.version": "Lua 5.3",
     "Lua.runtime.builtin": {
         "io": "disable",
