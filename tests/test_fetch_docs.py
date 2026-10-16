@@ -60,6 +60,21 @@ displayName = "Test CC"
         self.assertEqual(files["LICENSE"], b"Original license")
         self.assertNotIn("assets/test/textures/large.png", files)
 
+    def test_bundled_patchouli_integration_docs_are_selected(self):
+        base = "assets/test/patchouli_books/manual/"
+        with zipfile.ZipFile(self.jar, "a") as archive:
+            archive.writestr(base + "en_us/entries/drone.json", json.dumps({
+                "name": "Drone Interface", "pages": [{"text": "ComputerCraft methods: abortAction()"}]
+            }))
+            archive.writestr(base + "en_us/entries/machines.json", '{"text":"General machinery"}')
+            archive.writestr(base + "de_de/entries/drone.json", '{"text":"ComputerCraft"}')
+            archive.writestr("data/test/recipe/drone.json", '{"modid":"computercraft"}')
+        files = docs.bundled_files(self.jar)
+        self.assertIn(base + "en_us/entries/drone.json", files)
+        self.assertNotIn(base + "en_us/entries/machines.json", files)
+        self.assertNotIn(base + "de_de/entries/drone.json", files)
+        self.assertNotIn("data/test/recipe/drone.json", files)
+
     def test_unsafe_archive_paths_and_links_are_rejected(self):
         link = zipfile.ZipInfo("root/doc/link.lua")
         link.create_system = 3
@@ -93,6 +108,29 @@ displayName = "Test CC"
             files = docs.upstream_files(self.source)
         self.assertEqual(set(files), {"doc/api.md", "README.md", "LICENSE"})
         self.assertIn("/" + "a" * 40, request.call_args.args[0].full_url)
+
+    def test_gitlab_archive_and_index_use_the_pinned_repository(self):
+        source = {**self.source, "host": "gitlab.com", "repository": "owner/project"}
+        payload = archive_bytes([("project-commit/doc/api.md", b"API details")])
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = payload
+        with mock.patch.object(docs.urllib.request, "urlopen", return_value=response) as request:
+            files = docs.upstream_files(source)
+        self.assertEqual(files, {"doc/api.md": b"API details"})
+        url = request.call_args.args[0].full_url
+        self.assertEqual(url, "https://gitlab.com/api/v4/projects/owner%2Fproject/repository/archive.zip?sha=" + "a" * 40)
+        report = {"instance": {}, "mods": [], "sources": [{
+            **source, "status": "exact release", "installed": "1.0.0", "path": "snapshot", "files": 1,
+        }], "warnings": []}
+        index = docs.render_index(report)
+        self.assertIn("https://gitlab.com/owner/project/-/tree/" + "a" * 40, index)
+        self.assertNotIn("github.com/owner/project", index)
+
+    def test_unknown_repository_hosts_are_rejected_before_requests(self):
+        with mock.patch.object(docs.urllib.request, "urlopen") as request:
+            with self.assertRaises(docs.ReferenceError):
+                docs.upstream_files({**self.source, "host": "unknown.example"})
+        request.assert_not_called()
 
     def test_completed_snapshot_is_reused_and_corruption_is_repaired(self):
         producer = mock.Mock(return_value={"doc/api.md": b"API"})

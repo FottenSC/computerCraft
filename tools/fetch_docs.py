@@ -18,6 +18,7 @@ import stat
 import sys
 import tempfile
 import tomllib
+import urllib.parse
 import urllib.request
 import uuid
 import zipfile
@@ -30,6 +31,7 @@ MAX_ARCHIVE = 64 * 1024 * 1024
 MAX_FILE = 8 * 1024 * 1024
 MAX_SELECTED = 64 * 1024 * 1024
 LUA_ROOT = "data/computercraft/lua/"
+BUNDLED_FORMAT = 2
 
 
 class ReferenceError(ValueError):
@@ -83,18 +85,39 @@ def read_selected(archive: zipfile.ZipFile, select, strip_root: bool = False) ->
 
 
 def bundled_files(jar: Path) -> dict[str, bytes]:
+    def patchouli(name):
+        return "/patchouli_books/" in name and "/en_us/" in name and name.endswith(".json")
+
     def select(name):
         return (name.startswith(LUA_ROOT)
                 or "/computer_help/" in name
                 or ("/guides/" in name and name.endswith(".md"))
+                or patchouli(name)
                 or is_license(name)) and (PurePosixPath(name).suffix in TEXT_SUFFIXES or is_license(name))
     with zipfile.ZipFile(jar) as archive:
-        return read_selected(archive, select)
+        files = read_selected(archive, select)
+    markers = (b"computercraft", b"opencomputers", b"cc:tweaked", b"drone interface")
+    return {name: body for name, body in files.items()
+            if not patchouli(name) or any(marker in body.lower() for marker in markers)}
+
+
+def repository_urls(source: dict) -> tuple[str, str]:
+    repository, commit = source["repository"], source["commit"]
+    host = source.get("host", "github.com")
+    if host == "gitlab.com":
+        project = urllib.parse.quote(repository, safe="")
+        return (f"https://gitlab.com/api/v4/projects/{project}/repository/archive.zip?sha={commit}",
+                f"https://gitlab.com/{repository}/-/tree/{commit}")
+    if host == "github.com":
+        return (f"https://codeload.github.com/{repository}/zip/{commit}",
+                f"https://github.com/{repository}/tree/{commit}")
+    raise ReferenceError(f"Unsupported documentation host: {host}")
 
 
 def upstream_files(source: dict) -> dict[str, bytes]:
+    archive_url, _ = repository_urls(source)
     request = urllib.request.Request(
-        f"https://codeload.github.com/{source['repository']}/zip/{source['commit']}",
+        archive_url,
         headers={"User-Agent": "ccpm-reference-fetcher/1"},
     )
     with urllib.request.urlopen(request, timeout=60) as response:
@@ -184,7 +207,8 @@ def load_sources(path: Path) -> dict:
             raise ReferenceError("Invalid or duplicate documentation source ID")
         ids.add(source["id"])
         if not re.fullmatch(r"[\w.-]+/[\w.-]+", source["repository"]) or not re.fullmatch(r"[0-9a-f]{40}", source["commit"]):
-            raise ReferenceError("Documentation sources require a GitHub repository and full commit SHA")
+            raise ReferenceError("Documentation sources require a repository and full commit SHA")
+        repository_urls(source)  # Validate the supported GitHub/GitLab host.
         if source["match"] not in {"exact release", "series reference", "unverified reference"}:
             raise ReferenceError("Unknown documentation version match")
         if not source["version"] or not source["mod_id"] or not source["include"]:
@@ -246,7 +270,8 @@ def render_index(report: dict) -> str:
     for source in report["sources"]:
         lines += [f"### {source['id']}", "", f"Status: **{source['status']}**. Installed: {source['installed']}; source target: {source['version']}."]
         if source.get("path"):
-            lines.append(f"[Local snapshot]({source['path']}/) ({source['files']} files). [Upstream source](https://github.com/{source['repository']}/tree/{source['commit']}).")
+            _, browser_url = repository_urls(source)
+            lines.append(f"[Local snapshot]({source['path']}/) ({source['files']} files). [Upstream source]({browser_url}).")
         lines.append(f"Reference: `{source['ref']}`; commit: `{source['commit']}`.")
         if source.get("note"):
             lines.append(source["note"])
@@ -259,6 +284,8 @@ def render_index(report: dict) -> str:
         if mod["mod_id"] not in covered:
             url = mod.get("website") or mod.get("issue_tracker")
             lines.append(f"- {mod['name']} {mod['version']}: no curated upstream snapshot. " + (f"[Project]({url})" if url else f"See installed JAR `{mod['jar']}`."))
+    if all(mod["mod_id"] in covered for mod in report["mods"]):
+        lines.append("Every detected integration has a curated reference. Some are API source fallbacks rather than dedicated manuals; check the coverage labels above.")
     if report["warnings"]:
         lines += ["", "## Warnings", "", *("- " + warning for warning in report["warnings"])]
     return "\n".join(lines) + "\n"
@@ -279,7 +306,7 @@ def sync(instance: Path, cache: Path, configuration: dict, bundled_only: bool = 
         # Licenses alone do not mean a mod bundles API documentation.
         if not any(not is_license(name) for name in entries):
             continue
-        specification = {"jar": mod["jar"], "sha256": file_digest(jar), "version": mod["version"]}
+        specification = {"jar": mod["jar"], "sha256": file_digest(jar), "version": mod["version"], "format": BUNDLED_FORMAT}
         directory, receipt = snapshot(cache, "installed-" + mod["mod_id"], specification, lambda: entries)
         mod["bundled"] = {"path": directory.relative_to(cache).as_posix(), "files": len(receipt["files"])}
         print(f"Bundled: {mod['name']} {mod['version']} ({len(receipt['files'])} files)", flush=True)

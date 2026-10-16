@@ -111,6 +111,73 @@
       "match": "unverified reference",
       "note": "No tag matching 3.1.4.633 was found. Verify behavior in game before relying on this source snapshot.",
       "include": ["src/main/java/com/brandon3055/draconicevolution/integration/computers/**"]
+    },
+    {
+      "id": "pneumaticcraft",
+      "mod_id": "pneumaticcraft",
+      "version": "8.2.23",
+      "repository": "TeamPneumatic/pnc-repressurized",
+      "ref": "v8.2.23",
+      "commit": "98e656af1977a2c0587c563c90c7d06e0d30c091",
+      "match": "exact release",
+      "note": "The Drone Interface manual documents Lua methods and examples in Patchouli JSON. The installed JAR also bundles these pages. ComputerCraft and computer_common Java sources describe dispatch and return values.",
+      "include": ["src/main/resources/assets/pneumaticcraft/patchouli_books/book/en_us/entries/machines/drone_interface.json", "src/main/resources/assets/pneumaticcraft/patchouli_books/book/en_us/entries/programming/computer_control.json", "src/main/java/me/desht/pneumaticcraft/common/thirdparty/computer*/**", "src/main/java/me/desht/pneumaticcraft/common/thirdparty/IDocsProvider.java"]
+    },
+    {
+      "id": "create-propulsion",
+      "mod_id": "createpropulsion",
+      "version": "1.1.5",
+      "repository": "Propulsion-Team/create-propulsion-simulated",
+      "ref": "1.1.5 source/wiki snapshot, 2026-10-16",
+      "commit": "f7591fc9d3cbd97607ffc52f9da77861071742b7",
+      "match": "unverified reference",
+      "note": "The wiki includes a ComputerCraft overview and peripheral API tables for thrusters, engines, transmissions, and tilt adapters. This commit declares version 1.1.5, but no matching release tag or binary-to-source match was verified.",
+      "include": ["wiki/**", "src/main/java/dev/propulsionteam/propulsionsimulated/compat/computercraft/**", "gradle.properties"]
+    },
+    {
+      "id": "create-radars",
+      "mod_id": "create_radar",
+      "version": "0.4.9.4-1.21.1",
+      "repository": "Arsenalists-of-Create/Create-Radar",
+      "ref": "0.4.9.4 source before 5.0 development",
+      "commit": "15e36014949fdbed11c88690b3a68777c604effe",
+      "match": "unverified reference",
+      "note": "This historical snapshot declares 0.4.9.4-1.21.1. It contains Lua peripheral implementations for radar bearings, monitors, fire/pitch/yaw controllers, and data links. It has no matching release tag; the current development branch has moved to 5.0 and is not used here.",
+      "include": ["src/main/java/com/happysg/radar/compat/computercraft/**", "src/main/java/com/happysg/radar/block/datalink/DataPeripheral.java", "gradle.properties"]
+    },
+    {
+      "id": "create-bits-n-bobs",
+      "mod_id": "bits_n_bobs",
+      "version": "2.3.5",
+      "repository": "Aztech-Modding/Create-Bits-n-Bobs",
+      "ref": "2.3.5 source snapshot, 2026-10-16",
+      "commit": "3794a382b1408674959fe8e93c70fe5d0628ab7e",
+      "match": "unverified reference",
+      "note": "The author-linked repository moved from Industrialists-Of-Create to Aztech-Modding. This commit declares 2.3.5. HeadlampPeripheral.java and its operation handler are the API reference; a dedicated Lua manual and matching release tag were not found.",
+      "include": ["src/main/java/com/kipti/bnb/compat/computercraft/**", "src/main/java/com/kipti/bnb/registry/compat/BnbComputerBehaviourPeripherals.java", "gradle.properties"]
+    },
+    {
+      "id": "create-new-age",
+      "mod_id": "create_new_age",
+      "version": "1.2.0+mc1.21.1",
+      "host": "gitlab.com",
+      "repository": "antarcticgardens/create-new-age",
+      "ref": "1.21.1 source before 1.2.1 version bump",
+      "commit": "890925d0b5df048f8d0b07e6cfa3bc99b9958b27",
+      "match": "unverified reference",
+      "note": "The official GitLab snapshot declares modVersion=1.2.0 and minecraftVersion=1.21.1. Motor, energiser, and carbon-brush peripheral implementations document the available Lua calls. No matching release tag or binary-to-source match was verified.",
+      "include": ["common/src/main/java/org/antarcticgardens/cna/compat/computercraft/**", "neoforge/src/main/java/org/antarcticgardens/cna/neoforge/compat/computercraft/**", "gradle.properties"]
+    },
+    {
+      "id": "sable",
+      "mod_id": "sable",
+      "version": "2.0.5",
+      "repository": "ryanhcode/sable",
+      "ref": "mc1.21.1-2.0.5-neoforge",
+      "commit": "6966d2928340de7631abcecf8549904b877df0a8",
+      "match": "exact release",
+      "note": "Sable's own ComputerCraft integration adjusts wireless-network positions on moving structures. The Lua sublevel/aerodynamics APIs are provided by CC:Sable, whose exact-release reference is cached separately. These Java APIs provide backend context, not additional Lua globals.",
+      "include": ["common/src/main/java/dev/ryanhcode/sable/mixin/compatibility/computercraft/**", "common/src/main/java/dev/ryanhcode/sable/api/**", "gradle.properties"]
     }
   ]
 }

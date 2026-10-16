@@ -88,8 +88,9 @@ run this from the repository folder on your development computer:
 python tools/fetch_docs.py --instance "C:\path\to\your\minecraft-instance"
 ```
 
-The fetcher reads the instance's mod metadata, extracts bundled Lua APIs and help
-files, and downloads selected official documentation and API source at the commits
+The fetcher reads the instance's mod metadata, extracts bundled Lua APIs, help,
+and English Patchouli pages about computer integration, and downloads selected
+official documentation and API source from GitHub or GitLab at the commits
 in `docs/sources.json`. It never modifies the instance. The initial source list
 targets FTB Skies 2: Aero 1.13.0, Minecraft 1.21.1, and NeoForge 21.1.250.
 
